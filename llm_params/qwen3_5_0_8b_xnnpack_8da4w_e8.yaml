@@ -1,0 +1,31 @@
+# Qwen3.5-0.8B -> XNNPACK, 8da4w + 8-bit embedding (re-export; first export left
+# the 248320x1024 embedding in fp32, ~1GB of the 1.41GB .pte)
+base:
+  model_class: qwen3_5_0_8b
+  params: ./llm_params/qwen3_5_0_8b_v1.4.0.json
+  # Qwen3.5 tokenizer special ids:
+  #   <|im_start|> 248045
+  #   <|im_end|>   248046
+  #   <|endoftext|> 248044
+  metadata: '{"get_bos_id": 248045, "get_eos_ids":[248046,248044]}'
+
+model:
+  use_kv_cache: True
+  use_sdpa_with_kv_cache: False
+  enable_dynamic_shape: False
+  dtype_override: fp32
+
+quantization:
+  qmode: 8da4w
+  embedding_quantize: "8,0"
+
+export:
+  max_seq_length: 2048
+  max_context_length: 2048
+  output_dir: .
+  output_name: qwen3_5_0_8b_xnnpack_8da4w_e8.pte
+
+backend:
+  xnnpack:
+    enabled: True
+    extended_ops: True
