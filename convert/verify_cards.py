@@ -197,8 +197,80 @@ def verify_whisper():
     return int(bool(terminated and in_vocab)), 1, "greedy loop terminating at <|endoftext|>"
 
 
+def _mask_model(name, cat, size, norm):
+    """ormbg, DIS and U^2-Net all promise an alpha mask in 0-1 at a stated size
+    under a stated normalisation. If the normalisation on the card were wrong the
+    mask would come out empty or saturated, so require it to be neither and to
+    actually lie inside 0-1."""
+    m = _method(name)
+    imgs = calib_loader(cat, size, norm, n=6)
+    ok = considered = 0
+    for im in imgs:
+        a = m.execute(list(im))[0]
+        in_range = 0.0 <= a.min().item() and a.max().item() <= 1.0
+        # A photo with nothing salient in it correctly yields an empty mask, so
+        # only judge the ones where the model found something. What must never
+        # happen is a mask covering everything, or values outside 0-1 — the
+        # signature of a wrong normalisation or a doubled sigmoid.
+        if a.max().item() < 0.5:
+            continue
+        considered += 1
+        frac = (a > 0.5).float().mean().item()
+        ok += int(in_range and frac < 0.95)
+    return ok, considered, "images with an in-range, non-saturated mask"
+
+
+def verify_ormbg():
+    return _mask_model("ormbg_isnet", "portrait", 1024, "01")
+
+
+def verify_dis():
+    return _mask_model("dis_isnet", "general", 1024, "pm1")
+
+
+def verify_u2net():
+    return _mask_model("u2net", "general", 320, "imagenet")
+
+
+def verify_depth_anything():
+    """Card says: relative inverse depth. Inverse means nearer is larger, so on
+    ordinary photographs the bottom of the frame — usually the ground closest to
+    the camera — should read larger than the top."""
+    m = _method("depth_anything_v2_small")
+    imgs = calib_loader("street", 518, "imagenet", n=6)
+    votes = 0
+    for im in imgs:
+        d = m.execute(list(im))[0][0]
+        h = d.shape[0]
+        if not torch.isfinite(d).all().item():
+            return 0, len(imgs), "photos with finite depth (a frame was not finite)"
+        votes += int(d[int(h * 0.8):].mean().item() > d[:int(h * 0.2)].mean().item())
+    # Majority, not unanimity: "the bottom of the frame is nearer" is true of most
+    # street photographs but not all of them, and the check is about the sign
+    # convention on the card, not about any single picture.
+    return int(votes * 2 > len(imgs)), 1, "a majority reading nearer at the bottom (inverse depth)"
+
+
+def verify_edsr():
+    """Card says: 128x128 tile in, 512x512 out, RGB 0-1. Check the scale factor and
+    that the result stays in range — an upscaler that clips or explodes is useless."""
+    m = _method("edsr_base_x4")
+    imgs = calib_loader("general", 128, "01", n=4)
+    ok = 0
+    for im in imgs:
+        y = m.execute(list(im))[0]
+        ok += int(tuple(y.shape[-2:]) == (512, 512) and
+                  y.min().item() > -0.2 and y.max().item() < 1.2)
+    return ok, len(imgs), "tiles upscaled 4x and staying near 0-1"
+
+
 CHECKS = {
     "whisper_tiny": verify_whisper,
+    "ormbg_isnet": verify_ormbg,
+    "dis_isnet": verify_dis,
+    "u2net": verify_u2net,
+    "depth_anything_v2_small": verify_depth_anything,
+    "edsr_base_x4": verify_edsr,
     "clip_vit_b32": verify_clip,
     "sam21_tiny": verify_sam21,
     "edgetam": verify_edgetam,

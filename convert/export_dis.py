@@ -23,16 +23,18 @@ net.eval()
 
 class Wrap(nn.Module):
     """IS-Net returns ([d1..d6], [feature maps]); take the main side output.
-    The stock forward leaves d1 as raw logits, so apply the sigmoid here and
-    keep the app contract identical to ormbg-ExecuTorch."""
+
+    Do not add a sigmoid: the stock forward already returns `F.sigmoid(d1)`. An
+    extra one squashes the mask into [0.5, 0.731], where thresholding at 0.5 marks
+    the whole image as foreground — and every parity number stays at 1.000000
+    because the exported graph faithfully reproduces the wrapper it was given."""
 
     def __init__(self, n):
         super().__init__()
         self.n = n
 
     def forward(self, x):
-        d = self.n(x)[0][0]
-        return torch.sigmoid(d)
+        return self.n(x)[0][0]
 
 
 batches = calib_loader("general", 1024, "pm1")

@@ -36,7 +36,7 @@ measured on a real image.
 | [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | MIT |
 | [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | 24.4 (1.0000) | **6.8** (0.9999) | Apache-2.0 |
 | [ormbg (ISNet)](https://huggingface.co/mlboydaisuke/ormbg-ExecuTorch) | background removal | 176 | — | **44.3** (1.0000) | Apache-2.0 |
-| [DIS (IS-Net)](https://huggingface.co/mlboydaisuke/DIS-ISNet-ExecuTorch) | high-accuracy cutout | 176 | — | **44.3** (0.9878) | Apache-2.0 |
+| [DIS (IS-Net)](https://huggingface.co/mlboydaisuke/DIS-ISNet-ExecuTorch) | high-accuracy cutout | 176 | — | — | Apache-2.0 |
 | [U²-Net](https://huggingface.co/mlboydaisuke/U2Net-ExecuTorch) | salient object segmentation | 176 | — | — | Apache-2.0 |
 | [PIDNet-S](https://huggingface.co/mlboydaisuke/PIDNet-S-Cityscapes-ExecuTorch) | semantic segmentation | 31 | — | **7.9** (0.9989) | MIT |
 | [TwinLiteNet](https://huggingface.co/mlboydaisuke/TwinLiteNet-ExecuTorch) | drivable area + lanes | 1.8 | — | — | MIT |
@@ -181,8 +181,18 @@ instead of running to the window limit. All nine pass.
 The CLIP and Whisper checks are the ones that earn their keep: they exercise the
 tokenisation and the decode loop, which no parity number touches at all.
 
-It has already earned its place: MobileSAM's metadata claimed four mask outputs
-where the graph returns three, which no parity number would ever have flagged.
+It has already earned its place twice. MobileSAM's metadata claimed four mask
+outputs where the graph returns three. And DIS shipped with a doubled sigmoid — the
+IS-Net forward already applies one — which squashed its mask into [0.5, 0.731], so
+the documented "threshold at 0.5" marked every pixel as foreground. Parity read
+1.000000 in both cases, because the exported graph faithfully reproduces whatever
+wrapper it is handed; only running the documented recipe finds this class of error.
+
+The DIS bug had a second victim. With the output compressed into a third of its
+range, thresholded masks agreed too easily, and the int8 audit reported IoU 0.96.
+Once the fp32 output was correct the real number was 0.91 median and 0.46 at worst,
+and that build has been withdrawn. A broken range upstream flatters every quality
+metric downstream.
 
 ### Re-authoring helpers
 

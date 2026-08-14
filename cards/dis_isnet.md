@@ -11,21 +11,15 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 
 | precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
-| fp32 | `dis_isnet_xnnpack_fp32.pte` | 176.1 | 1.000000 | 169.0 |
-| int8 | `dis_isnet_xnnpack_int8.pte` | 44.3 | 0.987820 | 70.1 |
+| fp32 | `dis_isnet_xnnpack_fp32.pte` | 176.1 | 1.000000 | 123.4 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
-only, not a device number (torch eager fp32 on the same machine: 392.2 ms).
-
-### Checked in the task's own units
-
-Correlation is a first filter. These are the numbers that decide:
-
-- **int8** — mask IoU 0.963 median against fp32 (worst 0.927 of five images). The disagreement is boundary pixels, which is what int8 costs on a cutout model.
+only, not a device number (torch eager fp32 on the same machine: 364.6 ms).
 
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: worst-output corr 0.986 against fp32 eager, below the 0.995 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.
+- **int8 is not shipped**: measured in the units that matter for this model — mask IoU at 0.5: median 0.9106 over 10 real images, worst 0.4647.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -34,9 +28,9 @@ the correlation over all elements of each output tensor.
 
 | output | shape | max_abs_diff | corr |
 |--------|-------|--------------|------|
-| 0 | [1, 1, 1024, 1024] | 8.941e-07 | 1.000000 |
+| 0 | [1, 1, 1024, 1024] | 3.606e-06 | 1.000000 |
 
-XNNPACK delegate coverage (fp32): 100.0% (468/468 ops)
+XNNPACK delegate coverage (fp32): 100.0% (467/467 ops)
 
 ## Conversion
 
