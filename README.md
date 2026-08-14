@@ -167,9 +167,14 @@ correlation number noticing. This runs the documented recipe on real images and
 asserts something that must hold if it is right: RTMPose's SimCC decode has to put
 the nose above the shoulders and the shoulders above the hips, YOLOX's boxes have to
 land in-frame with positive area after NMS, MODNet's matte has to be neither empty
-nor the whole picture, MoGe's valid pixels have to carry positive finite depth, and a confident click on
-any of the three SAM-family repos has to return a mask that is neither empty nor the
-whole frame. All seven pass.
+nor the whole picture, MoGe's valid pixels have to carry positive finite depth, a confident click on any of
+the three SAM-family repos has to return a mask that is neither empty nor the whole
+frame, "a photo of a person" has to outrank "a photo of a car" on a portrait through
+CLIP's two towers, and Whisper's greedy loop has to terminate at `<|endoftext|>`
+instead of running to the window limit. All nine pass.
+
+The CLIP and Whisper checks are the ones that earn their keep: they exercise the
+tokenisation and the decode loop, which no parity number touches at all.
 
 It has already earned its place: MobileSAM's metadata claimed four mask outputs
 where the graph returns three, which no parity number would ever have flagged.

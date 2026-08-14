@@ -141,7 +141,65 @@ def verify_mobilesam():
     return _sam_family("mobilesam_encoder", "mobilesam_decoder", torch.float32, False)
 
 
+def verify_clip():
+    """Card says: L2-normalise both embeddings, then cosine-match, with the text
+    tower taking CLIP BPE tokens padded to 77 plus an attention mask. The whole
+    contract — including the tokenisation, which nothing else exercises — is only
+    right if a true caption outranks a false one on a real photo. Portrait crops
+    are people, so "a photo of a person" has to beat "a photo of a car"."""
+    from transformers import CLIPTokenizer
+    tok = CLIPTokenizer.from_pretrained("openai/clip-vit-base-patch32")
+    img_m, txt_m = _method("clip_vit_b32_image"), _method("clip_vit_b32_text")
+    prompts = ["a photo of a person", "a photo of a car"]
+    embs = []
+    for p in prompts:
+        enc = tok(p, padding="max_length", max_length=77, return_tensors="pt")
+        e = txt_m.execute([enc["input_ids"], enc["attention_mask"]])[0]
+        embs.append(torch.nn.functional.normalize(e, dim=-1))
+    text = torch.cat(embs)
+    ok = 0
+    imgs = calib_loader("portrait", 224, "clip", n=8)
+    for im in imgs:
+        v = torch.nn.functional.normalize(img_m.execute(list(im))[0], dim=-1)
+        ok += int((v @ text.T).argmax().item() == 0)
+    return ok, len(imgs), "portraits where 'a person' outranks 'a car'"
+
+
+def verify_whisper():
+    """Card says: seed decoder_input_ids with
+    [<|startoftranscript|>, <|lang|>, <|transcribe|>, <|notimestamps|>], take the
+    argmax of row len-1, append, re-run, and stop at <|endoftext|>.
+
+    Silence is the one input whose correct transcript is knowable without a speech
+    dataset, so that is what this feeds: the loop has to terminate at <|endoftext|>
+    rather than run to the window limit, and every token it emits along the way has
+    to be a real vocabulary id. It checks the mechanics of the documented loop, not
+    transcription accuracy."""
+    enc, dec = _method("whisper_tiny_encoder"), _method("whisper_tiny_decoder")
+    START, EOT, VOCAB, MAXT = 50258, 50257, 51865, 128
+    PREFIX = [START, 50259, 50359, 50363]  # start, <|en|>, <|transcribe|>, <|notimestamps|>
+    hidden = enc.execute([torch.zeros(1, 80, 3000)])[0]
+    ids = torch.full((1, MAXT), EOT, dtype=torch.long)
+    for i, t in enumerate(PREFIX):
+        ids[0, i] = t
+    n = len(PREFIX)
+    emitted = []
+    for _ in range(24):
+        logits = dec.execute([hidden, ids])[0]
+        nxt = int(logits[0, n - 1].argmax().item())
+        emitted.append(nxt)
+        if nxt == EOT or n >= MAXT:
+            break
+        ids[0, n] = nxt
+        n += 1
+    terminated = emitted and emitted[-1] == EOT
+    in_vocab = all(0 <= t < VOCAB for t in emitted)
+    return int(bool(terminated and in_vocab)), 1, "greedy loop terminating at <|endoftext|>"
+
+
 CHECKS = {
+    "whisper_tiny": verify_whisper,
+    "clip_vit_b32": verify_clip,
     "sam21_tiny": verify_sam21,
     "edgetam": verify_edgetam,
     "mobilesam": verify_mobilesam,
