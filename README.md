@@ -16,39 +16,66 @@ is a file swap. Where a precision did not make it, the card says so and why.
 
 ## Models
 
+## The biggest lever is the backend, not the precision
+
+Everything here shipped as XNNPACK first, and XNNPACK is CPU-only. ExecuTorch also
+carries a Core ML backend that reaches the Neural Engine, and on the same device
+with the same deterministic input it is not a small difference:
+
+| Depth-Anything-V2-Small | median | size | delegated |
+|---|---|---|---|
+| XNNPACK fp32 | 500.8 ms | 99.0 MB | 73.4% (50 subgraphs, 175 ops left on portable kernels) |
+| **Core ML** | **42.7 ms** | **50.2 MB** | **100% (369/369 ops, 1 subgraph)** |
+
+11.7x faster at half the size, with the output means agreeing to 0.13% — what fp16
+compute costs. Every fp16 and int8 change measured on this shelf was worth at most
+1.5x, so the whole quantization effort does not add up to one backend switch.
+
+Two things this does *not* mean. It does not mean XNNPACK was a mistake: the same
+`.pte` runs on Android, and Core ML files do not. And it does not mean the
+ExecuTorch layer is dead weight on Apple hardware — the same graph converted
+straight through coremltools to a `.mlpackage` runs 47.9 ms against ExecuTorch's
+48.0 ms, so wrapping it costs **0.3%**. One export, both platforms, both
+accelerated.
+
+Core ML builds convert with `CONVERT_BACKEND=coreml` and no change to any export
+script. 26 of the shelf's 29 models lower cleanly; RT-DETRv2 and D-FINE hit a
+coremltools restriction on mixed-dtype `matmul`, and LaMa still carries a complex
+tensor to its output.
+
 ### Vision
 
 Sizes are MB; `corr` is the worst per-output correlation against torch fp32 eager,
 measured on a real image.
 
-| Model | Task | fp32 | fp16 | int8 | License |
-|-------|------|------|------|------|---------|
-| [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | 12.6 dec | — | Apache-2.0 |
-| [MobileSAM](https://huggingface.co/mlboydaisuke/MobileSAM-ExecuTorch) | promptable segmentation | 28.3 enc + 20.5 dec | 10.5 dec | **14.0 enc** | Apache-2.0 / MIT |
-| [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | 55.6 enc + 12.6 dec | — | Apache-2.0 |
-| [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | Apache-2.0 |
-| [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
-| [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9998) | Apache-2.0 |
-| [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9688) | BSD-3 |
-| [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | **55.5** (1.0000) | — | Apache-2.0 |
-| [MoGe-2 ViT-S](https://huggingface.co/mlboydaisuke/MoGe-2-ViT-S-ExecuTorch) | point map + normals + mask + scale | 141 | 96.6 | **76.4** | MIT |
-| [DINOv2 ViT-S/14](https://huggingface.co/mlboydaisuke/DINOv2-ViT-S14-ExecuTorch) | feature extraction | 88 | 44.8 (0.9999) | **24.9** (0.9980) | Apache-2.0 |
-| [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | MIT |
-| [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | **24.4** (1.0000) | — | Apache-2.0 |
-| [ormbg (ISNet)](https://huggingface.co/mlboydaisuke/ormbg-ExecuTorch) | background removal | 176 | — | **44.3** (1.0000) | Apache-2.0 |
-| [DIS (IS-Net)](https://huggingface.co/mlboydaisuke/DIS-ISNet-ExecuTorch) | high-accuracy cutout | 176 | — | — | Apache-2.0 |
-| [U²-Net](https://huggingface.co/mlboydaisuke/U2Net-ExecuTorch) | salient object segmentation | 176 | — | — | Apache-2.0 |
-| [PIDNet-S](https://huggingface.co/mlboydaisuke/PIDNet-S-Cityscapes-ExecuTorch) | semantic segmentation | **31** | — | — | MIT |
-| [TwinLiteNet](https://huggingface.co/mlboydaisuke/TwinLiteNet-ExecuTorch) | drivable area + lanes | 1.8 | — | — | MIT |
-| [EDSR ×4](https://huggingface.co/mlboydaisuke/EDSR-x4-ExecuTorch) | super-resolution | 6.1 | — | **1.6** (0.9999) | Apache-2.0 |
-| [Real-ESRGAN x4v3](https://huggingface.co/mlboydaisuke/Real-ESRGAN-x4v3-ExecuTorch) | super-resolution | **4.9** | — | — | BSD-3 |
-| [LaMa](https://huggingface.co/mlboydaisuke/LaMa-Inpainting-ExecuTorch) | inpainting (512x512) | 205 | — | — | Apache-2.0 |
-| [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | BSD-3 |
-| [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | MIT |
-| [RTMPose-s](https://huggingface.co/mlboydaisuke/RTMPose-s-Body-ExecuTorch) | 2D body pose (17 kpts) | **21.9** | — | — | Apache-2.0 |
-| [RTMPose-m Hand](https://huggingface.co/mlboydaisuke/RTMPose-m-Hand-ExecuTorch) | hand pose (21 kpts) | 55.1 | — | — | Apache-2.0 |
-| [RTMPose-m Face](https://huggingface.co/mlboydaisuke/RTMPose-m-Face-ExecuTorch) | face landmarks (106 kpts) | 67.9 | — | — | Apache-2.0 |
-| [RTMPose-m Animal](https://huggingface.co/mlboydaisuke/RTMPose-m-Animal-ExecuTorch) | animal pose (17 kpts, AP-10K) | 54.5 | — | — | Apache-2.0 |
+| Model | Task | fp32 | fp16 | int8 | **Core ML (iOS)** | License |
+|-------|------|------|------|------|------|---------|
+| [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | 12.6 dec | — | **23.3** | Apache-2.0 |
+| [MobileSAM](https://huggingface.co/mlboydaisuke/MobileSAM-ExecuTorch) | promptable segmentation | 28.3 enc + 20.5 dec | 10.5 dec | **14.0 enc** | **31.9** | Apache-2.0 / MIT |
+| [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | 55.6 enc + 12.6 dec | — | **82.7** | Apache-2.0 |
+| [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | — | Apache-2.0 |
+| [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | — | Apache-2.0 |
+| [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9998) | **18.5** | Apache-2.0 |
+| [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9688) | **7.5** | BSD-3 |
+| [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | **55.5** (1.0000) | — | **50.2** | Apache-2.0 |
+| [MoGe-2 ViT-S](https://huggingface.co/mlboydaisuke/MoGe-2-ViT-S-ExecuTorch) | point map + normals + mask + scale | 141 | 96.6 | **76.4** | **73.2** | MIT |
+| [DINOv2 ViT-S/14](https://huggingface.co/mlboydaisuke/DINOv2-ViT-S14-ExecuTorch) | feature extraction | 88 | 44.8 (0.9999) | **24.9** (0.9980) | **44.7** | Apache-2.0 |
+| [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | **303.6** | MIT |
+| [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | **24.4** (1.0000) | — | **13.8** | Apache-2.0 |
+| [ormbg (ISNet)](https://huggingface.co/mlboydaisuke/ormbg-ExecuTorch) | background removal | 176 | — | **44.3** (1.0000) | **89.0** | Apache-2.0 |
+| [DIS (IS-Net)](https://huggingface.co/mlboydaisuke/DIS-ISNet-ExecuTorch) | high-accuracy cutout | 176 | — | — | **89.0** | Apache-2.0 |
+| [U²-Net](https://huggingface.co/mlboydaisuke/U2Net-ExecuTorch) | salient object segmentation | 176 | — | — | **89.0** | Apache-2.0 |
+| [PIDNet-S](https://huggingface.co/mlboydaisuke/PIDNet-S-Cityscapes-ExecuTorch) | semantic segmentation | **31** | — | — | **15.8** | MIT |
+| [TwinLiteNet](https://huggingface.co/mlboydaisuke/TwinLiteNet-ExecuTorch) | drivable area + lanes | 1.8 | — | — | **1.3** | MIT |
+| [EDSR ×4](https://huggingface.co/mlboydaisuke/EDSR-x4-ExecuTorch) | super-resolution | 6.1 | — | **1.6** (0.9999) | **3.3** | Apache-2.0 |
+| [Real-ESRGAN x4v3](https://huggingface.co/mlboydaisuke/Real-ESRGAN-x4v3-ExecuTorch) | super-resolution | **4.9** | — | — | **2.7** | BSD-3 |
+| [LaMa](https://huggingface.co/mlboydaisuke/LaMa-Inpainting-ExecuTorch) | inpainting (512x512) | 205 | — | — | — | Apache-2.0 |
+| [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | **16.3** | BSD-3 |
+| [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | **78.8** | MIT |
+| [RTMPose-s](https://huggingface.co/mlboydaisuke/RTMPose-s-Body-ExecuTorch) | 2D body pose (17 kpts) | **21.9** | — | — | — | Apache-2.0 |
+| [RTMPose-m Hand](https://huggingface.co/mlboydaisuke/RTMPose-m-Hand-ExecuTorch) | hand pose (21 kpts) | 55.1 | — | — | — | Apache-2.0 |
+| [RTMPose-m Face](https://huggingface.co/mlboydaisuke/RTMPose-m-Face-ExecuTorch) | face landmarks (106 kpts) | 67.9 | — | — | **34.4** | Apache-2.0 |
+| [RTMPose-m Animal](https://huggingface.co/mlboydaisuke/RTMPose-m-Animal-ExecuTorch) | animal pose (17 kpts, AP-10K) | 54.5 | — | — | — | Apache-2.0 |
 
 Every fp32 variant is corr 1.000000. A dash means that precision is not published —
 each model card explains the specific reason.
@@ -88,9 +115,9 @@ one of them:
 
 ### Audio
 
-| Model | Task | fp32 | fp16 | int8 | License |
-|-------|------|------|------|------|---------|
-| [Whisper-tiny](https://huggingface.co/mlboydaisuke/Whisper-tiny-ExecuTorch) | speech recognition | 32.9 enc + 198 dec | 17.6 enc + 99.1 dec | **11.7 enc** | Apache-2.0 |
+| Model | Task | fp32 | fp16 | int8 | **Core ML (iOS)** | License |
+|-------|------|------|------|------|------|---------|
+| [Whisper-tiny](https://huggingface.co/mlboydaisuke/Whisper-tiny-ExecuTorch) | speech recognition | 32.9 enc + 198 dec | 17.6 enc + 99.1 dec | **11.7 enc** | **75.9** | Apache-2.0 |
 
 Split encoder/decoder: the encoder runs once per 30-second window, the decoder once
 per generated token. Static 128-token window, no KV cache — a greedy step is argmax,
@@ -102,9 +129,9 @@ table to index and a delegate-packed copy for the output matmul.
 
 | Model | .pte | Decode (on-device) | License |
 |-------|------|--------------------|---------|
-| [LFM2.5-350M](https://huggingface.co/mlboydaisuke/LFM2.5-350M-ExecuTorch) | 253 MB | ~180 tok/s | LFM Open License |
-| [LFM2.5-1.2B-Instruct](https://huggingface.co/mlboydaisuke/LFM2.5-1.2B-Instruct-ExecuTorch) | 741 MB | 55–81 tok/s | LFM Open License |
-| [Qwen3.5-0.8B](https://huggingface.co/mlboydaisuke/Qwen3.5-0.8B-ExecuTorch) | 651 MB | ~10 tok/s | Apache-2.0 |
+| [LFM2.5-350M](https://huggingface.co/mlboydaisuke/LFM2.5-350M-ExecuTorch) | 253 MB | ~180 tok/s | — | LFM Open License |
+| [LFM2.5-1.2B-Instruct](https://huggingface.co/mlboydaisuke/LFM2.5-1.2B-Instruct-ExecuTorch) | 741 MB | 55–81 tok/s | — | LFM Open License |
+| [Qwen3.5-0.8B](https://huggingface.co/mlboydaisuke/Qwen3.5-0.8B-ExecuTorch) | 651 MB | ~10 tok/s | — | Apache-2.0 |
 
 All numbers are single-runtime ExecuTorch XNNPACK (CPU) measurements; details and
 conditions are on each model card. LLM exports use `export_llm` configs in

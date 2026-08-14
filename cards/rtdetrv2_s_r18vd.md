@@ -1,4 +1,4 @@
-# rtdetrv2_s_r18vd — ExecuTorch XNNPACK
+# rtdetrv2_s_r18vd — ExecuTorch
 
 - **Source**: PekingU/rtdetr_v2_r18vd
 - **License**: Apache-2.0
@@ -9,14 +9,14 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `rtdetrv2_s_r18vd_xnnpack_fp32.pte` | 80.9 | 1.000000 | 56.5 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 64.9 ms).
 
-### Precisions that did not earn a slot
+### Builds that did not earn a slot
 
 - **fp16 is not shipped**: worst-output corr 0.329 against fp32 eager, below the 0.995 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.
 
@@ -34,5 +34,5 @@ XNNPACK delegate coverage (fp32): 75.9% (839/1106 ops); ops left on the portable
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

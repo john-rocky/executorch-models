@@ -1,4 +1,4 @@
-# clip_vit_b32_image — ExecuTorch XNNPACK
+# clip_vit_b32_image — ExecuTorch
 
 - **Source**: openai/clip-vit-base-patch32
 - **License**: MIT
@@ -9,11 +9,19 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `clip_vit_b32_image_xnnpack_fp32.pte` | 351.6 | 1.000000 | 19.0 |
 | fp16 | `clip_vit_b32_image_xnnpack_fp16.pte` | 180.7 | 0.999996 | 26.1 |
 | int8 (dynamic) | `clip_vit_b32_image_xnnpack_int8.pte` | 95.9 | 0.995739 | 18.4 |
+| Core ML (fp16, iOS) | `clip_vit_b32_image_coreml_all.pte` | 176.2 | 0.999998 | 3.5 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 18.5 ms).
@@ -37,5 +45,5 @@ XNNPACK delegate coverage (fp32): 69.3% (390/563 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

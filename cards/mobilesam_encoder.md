@@ -1,4 +1,4 @@
-# mobilesam_encoder — ExecuTorch XNNPACK
+# mobilesam_encoder — ExecuTorch
 
 - **Source**: ChaoningZhang/MobileSAM + dhkim2810/MobileSAM weights
 - **License**: Apache-2.0 (code) / MIT (weights)
@@ -9,10 +9,18 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `mobilesam_encoder_xnnpack_fp32.pte` | 28.3 | 1.000000 | 126.1 |
 | int8 (dynamic) | `mobilesam_encoder_xnnpack_int8.pte` | 14.0 | 0.999880 | 132.0 |
+| Core ML (fp16, iOS) | `mobilesam_encoder_coreml_all.pte` | 15.0 | 0.999967 | 18.3 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 131.2 ms).
@@ -36,5 +44,5 @@ XNNPACK delegate coverage (fp32): 89.0% (597/671 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

@@ -1,4 +1,4 @@
-# yolox_s — ExecuTorch XNNPACK
+# yolox_s — ExecuTorch
 
 - **Source**: Megvii-BaseDetection/YOLOX (yolox_s)
 - **License**: Apache-2.0
@@ -9,10 +9,18 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `yolox_s_xnnpack_fp32.pte` | 35.9 | 1.000000 | 25.0 |
 | int8 | `yolox_s_xnnpack_int8.pte` | 9.2 | 0.999800 | 77.3 |
+| Core ML (fp16, iOS) | `yolox_s_coreml_all.pte` | 18.5 | 0.999991 | 15.7 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 38.6 ms).
@@ -23,7 +31,7 @@ Correlation is a first filter. These are the numbers that decide:
 
 - **int8** — measured in the units that matter for this model — fraction of post-NMS detections matched at IoU 0.5 and same class: 0.938 of the fp32 build's detections are matched (90 of 96 across 10 images), worst single image 0.571.
 
-### Precisions that did not earn a slot
+### Builds that did not earn a slot
 
 - **fp16 is not shipped**: it comes out at 101% of the fp32 file (36.1 MB vs 35.9 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
 
@@ -40,5 +48,5 @@ XNNPACK delegate coverage (fp32): 88.2% (351/398 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

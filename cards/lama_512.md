@@ -1,4 +1,4 @@
-# lama_512 — ExecuTorch XNNPACK
+# lama_512 — ExecuTorch
 
 - **Source**: advimman/lama + smartywu/big-lama weights
 - **License**: Apache-2.0
@@ -9,14 +9,14 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `lama_512_xnnpack_fp32.pte` | 204.8 | 1.000000 | 833.8 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 638.2 ms).
 
-### Precisions that did not earn a slot
+### Builds that did not earn a slot
 
 - **int8 is not shipped**: measured in the units that matter for this model — PSNR vs the fp32 .pte (dB): median 22.4666 over 5 real images, worst 21.3621.
 
@@ -33,7 +33,7 @@ XNNPACK delegate coverage (fp32): 49.8% (2020/4056 ops); ops left on the portabl
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
 
 **Notes**: The inverse FFT inside every FourierUnit is replaced with the real matmul form from convert/fft_ops.py; ExecuTorch cannot lower torch.fft.irfftn. Spatial size is fixed because those matrices are built per size.

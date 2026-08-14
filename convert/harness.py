@@ -29,6 +29,31 @@ RESULTS_DIR = os.path.join(REPO, "results")
 # Print a WARN when worst-output corr vs fp32 eager drops below these.
 CORR_GATE = {"fp32": 0.999, "fp16": 0.995, "int8": 0.95}
 
+# CONVERT_BACKEND=coreml re-targets every export script without editing any of
+# them. XNNPACK is CPU-only; Core ML can place the graph on the Neural Engine and
+# measured 11.7x faster on Depth-Anything-V2 (see KNOWLEDGE). Core ML computes in
+# fp16, so its correlation gate is the fp16 one, not fp32's.
+BACKEND = os.environ.get("CONVERT_BACKEND", "xnnpack")
+COREML_UNIT = os.environ.get("CONVERT_COREML_UNIT", "all")
+
+
+def _coreml_partitioner():
+    """compute_unit is baked into the .pte at compile time, not chosen at load."""
+    import coremltools as ct
+    from executorch.backends.apple.coreml.compiler import CoreMLBackend
+    from executorch.backends.apple.coreml.partition import CoreMLPartitioner
+
+    units = {"all": ct.ComputeUnit.ALL,
+             "ne": ct.ComputeUnit.CPU_AND_NE,
+             "gpu": ct.ComputeUnit.CPU_AND_GPU,
+             "cpu": ct.ComputeUnit.CPU_ONLY}
+    specs = CoreMLBackend.generate_compile_specs(
+        compute_precision=ct.precision.FLOAT16,
+        compute_unit=units[COREML_UNIT],
+        minimum_deployment_target=ct.target.iOS17,
+    )
+    return CoreMLPartitioner(compile_specs=specs)
+
 
 def _require_contiguous(inputs, what):
     """The ExecuTorch runtime reads an input tensor as if it were contiguous and
@@ -284,7 +309,9 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
 
     # partitioner=False -> no delegation (portable ops), for delegate-bug A/B.
     if partitioner is None:
-        if exclude_configs:
+        if BACKEND == "coreml":
+            partitioner = _coreml_partitioner()
+        elif exclude_configs:
             from executorch.backends.xnnpack.partition.config import ALL_PARTITIONER_CONFIGS
             cfgs = [c for c in ALL_PARTITIONER_CONFIGS if c.__name__ not in exclude_configs]
             partitioner = XnnpackPartitioner(configs=cfgs)
@@ -301,7 +328,8 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     edge = to_edge_transform_and_lower(ep, partitioner=parts, **kwargs)
     delegation = _delegation_report(edge.exported_program().graph_module)
     et = edge.to_executorch()
-    pte_path = os.path.join(PTE_DIR, f"{name}_xnnpack_{precision}.pte")
+    suffix = f"coreml_{COREML_UNIT}" if BACKEND == "coreml" else f"xnnpack_{precision}"
+    pte_path = os.path.join(PTE_DIR, f"{name}_{suffix}.pte")
     with open(pte_path, "wb") as f:
         f.write(et.buffer)
     size_mb = os.path.getsize(pte_path) / 1e6
@@ -337,6 +365,7 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
         "parity": parity,
         **({"int8_mode": "dynamic (linear-only)" if int8_dynamic else "static"}
            if precision == "int8" else {}),
+        **({"backend": f"coreml ({COREML_UNIT}, fp16 compute)"} if BACKEND == "coreml" else {}),
         "delegation": delegation,
         "et_ms_median": round(et_ms, 1),
         "torch_eager_ms_median": round(torch_ms, 1),
@@ -345,12 +374,15 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     }
     if extra_meta:
         result.update(extra_meta)
-    suffix = "" if precision == "fp32" else f"_{precision}"
-    with open(os.path.join(RESULTS_DIR, f"{name}{suffix}.json"), "w") as f:
+    if BACKEND == "coreml":
+        rsuffix = f"_coreml_{COREML_UNIT}"
+    else:
+        rsuffix = "" if precision == "fp32" else f"_{precision}"
+    with open(os.path.join(RESULTS_DIR, f"{name}{rsuffix}.json"), "w") as f:
         json.dump(result, f, indent=2)
 
     worst_corr = min(p["corr"] for p in parity)
-    print(f"[{name}:{precision}] pte={size_mb:.1f}MB et={et_ms:.1f}ms "
+    print(f"[{name}:{BACKEND}/{precision}] pte={size_mb:.1f}MB et={et_ms:.1f}ms "
           f"eager(fp32)={torch_ms:.1f}ms worst_corr={worst_corr:.6f}")
     total = delegation["delegated_ops"] + delegation["portable_ops"]
     print(f"  delegation: {delegation['coverage_pct']}% "
@@ -359,9 +391,10 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
         top = ", ".join(f"{k} x{v}" for k, v in
                         list(delegation["portable_fallback"].items())[:8])
         print(f"  portable fallback: {top}")
-    if worst_corr < CORR_GATE.get(precision, 0.999):
-        print(f"  WARN: worst corr {worst_corr:.4f} below {precision} gate "
-              f"{CORR_GATE[precision]} — inspect before shipping")
+    gate_key = "fp16" if BACKEND == "coreml" else precision
+    if worst_corr < CORR_GATE.get(gate_key, 0.999):
+        print(f"  WARN: worst corr {worst_corr:.4f} below {gate_key} gate "
+              f"{CORR_GATE[gate_key]} — inspect before shipping")
     for p in parity:
         print(f"  out{p['output']} {p['shape']} max_abs_diff={p['max_abs_diff']:.3e} "
               f"corr={p['corr']:.6f} rel_l2={p['rel_l2']:.3e}")

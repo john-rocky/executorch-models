@@ -5,7 +5,7 @@ that passed their quality gate, plus an honest note about any that did not.
 """
 import os
 
-from variants import CORR_GATE, PRECISIONS, label, load_variants, model_names
+from variants import BACKENDS, CORR_GATE, PRECISIONS, label, load_variants, model_names
 
 SKIP_TEXT = {
     "quality": (
@@ -29,7 +29,7 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 CARDS = os.path.join(REPO, "cards")
 os.makedirs(CARDS, exist_ok=True)
 
-TEMPLATE = """# {name} — ExecuTorch XNNPACK
+TEMPLATE = """# {name} — ExecuTorch
 
 - **Source**: {source}
 - **License**: {license}
@@ -40,11 +40,11 @@ TEMPLATE = """# {name} — ExecuTorch XNNPACK
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 {variant_rows}
 
-\\*Mac arm64, single process, median of 10 — a reference point for relative cost
+{coreml_note}\*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: {torch_eager_ms_median} ms).
 {failed}
 ## Verification (executorch {executorch}, torch {torch})
@@ -58,7 +58,7 @@ the correlation over all elements of each output tensor.
 {delegation}
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models)){notes}
 """
 
@@ -68,7 +68,7 @@ def main():
         variants = load_variants(name)
         r = variants["fp32"]
         vrows, failed_lines, audited = [], [], []
-        for prec in PRECISIONS:
+        for prec in PRECISIONS + BACKENDS:
             v = variants.get(prec)
             if not v:
                 continue
@@ -96,7 +96,7 @@ def main():
                        "Correlation is a first filter. These are the numbers that decide:\n\n"
                        + "\n".join(audited) + "\n")
         if failed_lines:
-            failed += ("\n### Precisions that did not earn a slot\n\n"
+            failed += ("\n### Builds that did not earn a slot\n\n"
                        + "\n".join(failed_lines) + "\n")
         prows = "\n".join(
             f"| {p['output']} | {p['shape']} | {p['max_abs_diff']:.3e} | {p['corr']:.6f} |"
@@ -112,13 +112,23 @@ def main():
                 delegation += f"; ops left on the portable kernels: {ops}"
             delegation += "\n"
         notes = ""
-        for prec in PRECISIONS:
+        for prec in PRECISIONS + BACKENDS:
             v = variants.get(prec)
             if v and v.get("notes"):
                 tag = "" if prec == "fp32" else f" ({prec})"
                 notes += f"\n\n**Notes{tag}**: {v['notes']}"
+        cm = variants.get("coreml_all")
+        coreml_note = ("""
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
+
+""" if cm and cm["ships"] else "")
         card = TEMPLATE.format(
             variant_rows="\n".join(vrows), parity_rows=prows, delegation=delegation,
+            coreml_note=coreml_note,
             failed=failed, notes=notes,
             **{k: r.get(k, "?") for k in
                ["name", "source", "license", "inputs", "preprocess", "outputs",

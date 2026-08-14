@@ -1,4 +1,4 @@
-# rtmpose_m_animal — ExecuTorch XNNPACK
+# rtmpose_m_animal — ExecuTorch
 
 - **Source**: open-mmlab/mmpose RTMPose (rtmpose-m_simcc-ap10k_pt-aic-coco_210e-256x256-7a041aa1)
 - **License**: Apache-2.0
@@ -9,12 +9,16 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `rtmpose_m_animal_xnnpack_fp32.pte` | 54.5 | 1.000000 | 9.4 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 91.4 ms).
+
+### Builds that did not earn a slot
+
+- **Core ML (fp16, iOS) is not shipped**: measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 0.9412 over 10 real images, worst 0.7647.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -30,7 +34,7 @@ XNNPACK delegate coverage (fp32): 93.9% (306/326 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
 
 **Notes**: Top-down again: crop one animal first. AP-10K covers 54 mammal species; a general object detector's animal classes make a workable front end.

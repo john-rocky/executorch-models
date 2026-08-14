@@ -6,9 +6,15 @@ import os
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 RESULTS = os.path.join(REPO, "results")
 PRECISIONS = ["fp32", "fp16", "int8"]
+# Core ML is a second backend, not a fourth precision. XNNPACK is CPU-only and
+# portable (the same file runs on Android); Core ML reaches the Neural Engine and
+# is iOS-only. They do not compete for one slot, so a Core ML build is never
+# dominated on size — it ships whenever its quality holds.
+BACKENDS = ["coreml_all"]
 
 # Worst-output corr vs fp32 eager below which a variant is not shippable.
-CORR_GATE = {"fp32": 0.999, "fp16": 0.995, "int8": 0.95}
+# Core ML computes in fp16 whatever the graph dtype, so it answers to the fp16 bar.
+CORR_GATE = {"fp32": 0.999, "fp16": 0.995, "int8": 0.95, "coreml_all": 0.995}
 # A reduced precision also has to earn its slot: XNNPACK serializes convolution
 # weights as fp32 whatever the graph dtype (op_conv2d passes force_fp32=True), so
 # a fp16 CNN is byte-for-byte the fp32 file plus cast ops. Ship only variants that
@@ -32,6 +38,26 @@ def load_variants(name):
             r["worst_corr"] = worst_corr(r)
             r["gate_pass"] = r["worst_corr"] >= CORR_GATE[prec]
             out[prec] = r
+    for backend in BACKENDS:
+        path = os.path.join(RESULTS, f"{name}_{backend}.json")
+        if not os.path.exists(path):
+            continue
+        r = json.load(open(path))
+        r["worst_corr"] = worst_corr(r)
+        r["gate_pass"] = r["worst_corr"] >= CORR_GATE[backend]
+        r["size_ratio"] = 1.0
+        r["dominated_by"] = None
+        override = r.get("quality_override")
+        if override and override.get("verdict") == "fail":
+            r["ships"], r["skip_reason"] = False, "task_metric"
+        elif override and override.get("verdict") == "pass":
+            r["ships"], r["skip_reason"] = True, None
+        elif not r["gate_pass"]:
+            r["ships"], r["skip_reason"] = False, "quality"
+        else:
+            r["ships"], r["skip_reason"] = True, None
+        out[backend] = r
+
     base = out.get("fp32")
     for i, prec in enumerate(PRECISIONS):
         r = out.get(prec)
@@ -88,13 +114,22 @@ def model_names():
         if not f.endswith(".json"):
             continue
         stem = f[: -len(".json")]
-        if any(stem.endswith(f"_{p}") for p in PRECISIONS[1:]):
+        if any(stem.endswith(f"_{p}") for p in PRECISIONS[1:] + BACKENDS):
             continue
-        names.append(stem)
+        # results/ also holds device benchmarks and build reports; a model result
+        # is identified by its shape, not by living in the directory.
+        try:
+            d = json.load(open(os.path.join(RESULTS, f)))
+        except (ValueError, OSError):
+            continue
+        if isinstance(d, dict) and "parity" in d and "pte" in d:
+            names.append(stem)
     return names
 
 
 def label(prec, result):
     if prec == "int8" and result.get("int8_mode", "").startswith("dynamic"):
         return "int8 (dynamic)"
+    if prec.startswith("coreml"):
+        return "Core ML (fp16, iOS)"
     return prec

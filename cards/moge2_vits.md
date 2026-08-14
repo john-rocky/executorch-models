@@ -1,4 +1,4 @@
-# moge2_vits — ExecuTorch XNNPACK
+# moge2_vits — ExecuTorch
 
 - **Source**: Ruicheng/moge-2-vits-normal
 - **License**: MIT
@@ -9,11 +9,19 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `moge2_vits_xnnpack_fp32.pte` | 140.8 | 0.999998 | 750.9 |
 | fp16 | `moge2_vits_xnnpack_fp16.pte` | 96.6 | 0.434851 — see below | 1714.8 |
 | int8 (dynamic) | `moge2_vits_xnnpack_int8.pte` | 76.4 | 0.998758 | 746.5 |
+| Core ML (fp16, iOS) | `moge2_vits_coreml_all.pte` | 73.2 | 0.541272 — see below | 87.7 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 345.4 ms).
@@ -24,6 +32,7 @@ Correlation is a first filter. These are the numbers that decide:
 
 - **fp16** — correlation reads 0.43 on this build, and that number is an artifact: one of the four outputs is a near-binary validity mask whose raw logits correlate badly while the thresholded mask is identical. Measured properly against fp32 — mask IoU 1.0000, point map cosine 1.000000, normals cosine 1.000000, metric scale within 0.6% — the geometry is unchanged.
 - **int8 (dynamic)** — measured in the units that matter for this model — cosine similarity of the point map and normals: median 1.0000 over 10 real images, worst 1.0000.
+- **Core ML (fp16, iOS)** — measured in the units that matter for this model — cosine similarity of the point map and normals: median 1.0000 over 10 real images, worst 1.0000.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -41,5 +50,5 @@ XNNPACK delegate coverage (fp32): 53.7% (623/1160 ops); ops left on the portable
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

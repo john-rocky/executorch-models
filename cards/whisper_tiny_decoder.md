@@ -1,4 +1,4 @@
-# whisper_tiny_decoder — ExecuTorch XNNPACK
+# whisper_tiny_decoder — ExecuTorch
 
 - **Source**: openai/whisper-tiny
 - **License**: Apache-2.0
@@ -9,10 +9,18 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `whisper_tiny_decoder_xnnpack_fp32.pte` | 198.0 | 1.000000 | 18.1 |
 | fp16 | `whisper_tiny_decoder_xnnpack_fp16.pte` | 99.1 | 0.999988 | 48.8 |
+| Core ML (fp16, iOS) | `whisper_tiny_decoder_coreml_all.pte` | 59.3 | 0.999910 | 3.1 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 12.1 ms).
@@ -30,5 +38,5 @@ XNNPACK delegate coverage (fp32): 64.6% (287/444 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

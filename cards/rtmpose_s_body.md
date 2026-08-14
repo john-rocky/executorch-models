@@ -1,4 +1,4 @@
-# rtmpose_s_body — ExecuTorch XNNPACK
+# rtmpose_s_body — ExecuTorch
 
 - **Source**: open-mmlab/mmpose RTMPose-s body7 (rtmpose-s_simcc-body7_pt-body7_420e-256x192)
 - **License**: Apache-2.0
@@ -9,17 +9,18 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `rtmpose_s_body_xnnpack_fp32.pte` | 21.9 | 1.000000 | 5.7 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 34.3 ms).
 
-### Precisions that did not earn a slot
+### Builds that did not earn a slot
 
-- **fp16 is not shipped**: keypoints move a median of 16 px and up to 41 px on a 192x256 crop (169 confident keypoints across 12 person crops). It also only saves 5% of the file, so there is nothing to weigh against that.
-- **int8 is not shipped**: measured in the units that matter for this model — largest keypoint displacement against fp32, in crop pixels: median 131.00 over 10 images, worst 163.50.
+- **fp16 is not shipped**: measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 0.7647 over 10 real images, worst 0.3529.
+- **int8 is not shipped**: measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 0.0000 over 10 real images, worst 0.0000.
+- **Core ML (fp16, iOS) is not shipped**: measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 0.9412 over 10 real images, worst 0.8824.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -35,5 +36,5 @@ XNNPACK delegate coverage (fp32): 92.0% (229/249 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

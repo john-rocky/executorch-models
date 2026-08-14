@@ -1,4 +1,4 @@
-# rtmpose_m_hand — ExecuTorch XNNPACK
+# rtmpose_m_hand — ExecuTorch
 
 - **Source**: open-mmlab/mmpose RTMPose (rtmpose-m_simcc-hand5_pt-aic-coco_210e-256x256-74fb594)
 - **License**: Apache-2.0
@@ -9,12 +9,16 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `rtmpose_m_hand_xnnpack_fp32.pte` | 55.1 | 1.000000 | 9.6 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 94.8 ms).
+
+### Builds that did not earn a slot
+
+- **Core ML (fp16, iOS) is not shipped**: measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 1.0000 over 10 real images, worst 0.3810.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -30,7 +34,7 @@ XNNPACK delegate coverage (fp32): 93.9% (306/326 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
 
 **Notes**: This is a top-down model: it needs a crop around one hand, which means a hand detector upstream. This repository does not ship one — mmpose distributes rtmdet-nano-hand for the job. Pose quality here is verified only as far as the decode contract; judging the keypoints needs hand imagery.

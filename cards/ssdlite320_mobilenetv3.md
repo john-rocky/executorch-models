@@ -1,4 +1,4 @@
-# ssdlite320_mobilenetv3 — ExecuTorch XNNPACK
+# ssdlite320_mobilenetv3 — ExecuTorch
 
 - **Source**: torchvision ssdlite320_mobilenet_v3_large COCO_V1
 - **License**: BSD-3-Clause
@@ -9,10 +9,18 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `ssdlite320_mobilenetv3_xnnpack_fp32.pte` | 13.8 | 1.000000 | 5.1 |
 | int8 | `ssdlite320_mobilenetv3_xnnpack_int8.pte` | 3.9 | 0.968820 | 7.1 |
+| Core ML (fp16, iOS) | `ssdlite320_mobilenetv3_coreml_all.pte` | 7.5 | 0.999658 | 0.9 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 115.3 ms).
@@ -23,7 +31,7 @@ Correlation is a first filter. These are the numbers that decide:
 
 - **int8** — measured in the units that matter for this model — fraction of firing detections agreeing: 0.999 of the fp32 build's detections are matched (26988 of 27004 across 10 images), worst single image 0.998.
 
-### Precisions that did not earn a slot
+### Builds that did not earn a slot
 
 - **fp16 is not shipped**: it comes out at 100% of the fp32 file (13.8 MB vs 13.8 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
 
@@ -51,5 +59,5 @@ XNNPACK delegate coverage (fp32): 94.8% (289/305 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))

@@ -1,4 +1,4 @@
-# rtmpose_m_face — ExecuTorch XNNPACK
+# rtmpose_m_face — ExecuTorch
 
 - **Source**: open-mmlab/mmpose RTMPose (rtmpose-m_simcc-face6_pt-in1k_120e-256x256-72a37400)
 - **License**: Apache-2.0
@@ -9,12 +9,26 @@
 
 All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
 
-| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+| build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `rtmpose_m_face_xnnpack_fp32.pte` | 67.9 | 1.000000 | 10.4 |
+| Core ML (fp16, iOS) | `rtmpose_m_face_coreml_all.pte` | 34.4 | 0.999897 | 3.3 |
+
+
+The Core ML build is the same graph lowered to Apple's Neural Engine instead of
+XNNPACK, which is CPU-only. On an iPhone 17 Pro, Depth-Anything-V2-Small runs
+500.8 ms through XNNPACK and 42.7 ms through Core ML, at half the file size. It
+computes in fp16 and is iOS-only; the XNNPACK files stay the portable option and
+are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 94.4 ms).
+
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **Core ML (fp16, iOS)** — measured in the units that matter for this model — fraction of keypoints landing within 4 px of fp32: median 0.9811 over 10 real images, worst 0.9151.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
@@ -30,7 +44,7 @@ XNNPACK delegate coverage (fp32): 93.9% (306/326 ops); ops left on the portable 
 
 ## Conversion
 
-torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
+torch.export -> to_edge_transform_and_lower(partitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
 
 **Notes**: Top-down: crop one face first. In practice a portrait framed on the head works directly, which is how the card check exercises it.
