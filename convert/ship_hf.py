@@ -85,7 +85,10 @@ def resolve_files(entries):
         assert variants, f"no results for {e!r} — run its export script first"
         for prec, v in variants.items():
             if not v["ships"]:
-                if v["skip_reason"] == "quality":
+                if v["skip_reason"] == "task_metric":
+                    ov = v["quality_override"]
+                    why = f"{ov['metric']} = {ov['median']} (worst {ov['worst']})"
+                elif v["skip_reason"] == "quality":
                     why = f"corr {v['worst_corr']:.3f} below gate"
                 elif v["skip_reason"] == "dominated":
                     why = f"no smaller than {v['dominated_by']}"
