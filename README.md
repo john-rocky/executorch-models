@@ -42,6 +42,7 @@ measured on a real image.
 | [EDSR ×4](https://huggingface.co/mlboydaisuke/EDSR-x4-ExecuTorch) | super-resolution | 6.1 | — | **1.6** (0.9999) | Apache-2.0 |
 | [Real-ESRGAN x4v3](https://huggingface.co/mlboydaisuke/Real-ESRGAN-x4v3-ExecuTorch) | super-resolution | **4.9** | — | — | BSD-3 |
 | [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | BSD-3 |
+| [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | MIT |
 
 Every fp32 variant is corr 1.000000. A dash means that precision is not published —
 each model card explains the specific reason.
@@ -104,6 +105,8 @@ MobileSAM's TinyViT encoder returns corr -0.37 from a plain `model.half()` in ea
 with no ExecuTorch involved — some architectures simply are not half-precision safe,
 and no amount of export-side work recovers that. Dynamic int8 was the answer for
 that encoder instead (28.3 → 14.0 MB at corr 0.9999).
+
+**Judge quality with the task's own metric when the output is small.** Correlation works on a 260k-element mask and says very little about a six-element regression. 6DRepNet's int8 build reads corr 0.815, which looks borderline; converting both outputs to rotation matrices puts it at a median 46° apart from fp32. Re-parameterized RepVGG backbones are a known post-training-quantization failure — the fused branches leave weight ranges too wide for an int8 grid.
 
 **Some models just do not quantize.** EfficientNet-B1 lands at corr 0.077 whether
 weights are per-channel or per-tensor, and whether the whole graph or only

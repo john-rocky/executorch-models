@@ -64,6 +64,8 @@ SHIP = [
      "cards/dis_isnet.md", ["image-segmentation"], None),
     ("Real-ESRGAN-x4v3-ExecuTorch", "bsd-3-clause", ["real_esrgan_x4v3"],
      "cards/real_esrgan_x4v3.md", ["image-to-image", "super-resolution"], None),
+    ("6DRepNet-HeadPose-ExecuTorch", "mit", ["sixdrepnet_headpose"],
+     "cards/sixdrepnet_headpose.md", ["image-classification", "head-pose-estimation"], None),
 ]
 
 
