@@ -23,6 +23,7 @@ measured on a real image.
 
 | Model | Task | fp32 | fp16 | int8 | License |
 |-------|------|------|------|------|---------|
+| [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | — | — | Apache-2.0 |
 | [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | — | — | Apache-2.0 |
 | [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | Apache-2.0 |
 | [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
