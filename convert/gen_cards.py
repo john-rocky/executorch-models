@@ -73,9 +73,13 @@ def main():
             if not v:
                 continue
             if v["ships"]:
-                vrows.append(f"| {label(prec, v)} | `{v['pte']}` | {v['size_mb']} | "
-                             f"{v['worst_corr']:.6f} | {v['et_ms_median']} |")
                 ov = v.get("quality_override")
+                corr_cell = f"{v['worst_corr']:.6f}"
+                if ov and ov.get("verdict") == "pass" and v["worst_corr"] < CORR_GATE[prec]:
+                    # Do not leave a misleading number standing alone in the table.
+                    corr_cell += " — see below"
+                vrows.append(f"| {label(prec, v)} | `{v['pte']}` | {v['size_mb']} | "
+                             f"{corr_cell} | {v['et_ms_median']} |")
                 if ov and ov.get("verdict") == "pass":
                     audited.append(f"- **{label(prec, v)}** — {ov['why']}")
             else:

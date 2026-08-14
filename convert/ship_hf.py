@@ -71,6 +71,8 @@ SHIP = [
      "cards/whisper_tiny.md", ["automatic-speech-recognition"], "openai/whisper-tiny"),
     ("LaMa-Inpainting-ExecuTorch", "apache-2.0", ["lama_512"],
      "cards/lama_512.md", ["image-to-image", "inpainting"], None),
+    ("MoGe-2-ViT-S-ExecuTorch", "mit", ["moge2_vits"],
+     "cards/moge2_vits.md", ["depth-estimation", "image-to-3d"], "Ruicheng/moge-2-vits-normal"),
 ]
 
 
@@ -87,7 +89,8 @@ def resolve_files(entries):
             if not v["ships"]:
                 if v["skip_reason"] == "task_metric":
                     ov = v["quality_override"]
-                    why = f"{ov['metric']} = {ov['median']} (worst {ov['worst']})"
+                    num = ov.get("headline", ov.get("median", ov.get("median_db")))
+                    why = f"{ov['metric']}" + (f" = {num}" if num is not None else "")
                 elif v["skip_reason"] == "quality":
                     why = f"corr {v['worst_corr']:.3f} below gate"
                 elif v["skip_reason"] == "dominated":

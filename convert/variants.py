@@ -58,6 +58,16 @@ def load_variants(name):
         override = r.get("quality_override")
         if override and override.get("verdict") == "fail":
             r["ships"], r["skip_reason"] = False, "task_metric"
+        elif override and override.get("verdict") == "pass":
+            # A measurement in the task's units overrides the correlation gate in
+            # both directions. MoGe's fp16 build reads corr 0.43 purely because
+            # one of its four outputs is a near-binary mask whose raw logits
+            # correlate badly while the thresholded mask is identical; its point
+            # map and normals are cosine 1.000000. Refusing to ship on that would
+            # be the same mistake as shipping LaMa's int8 on a passing corr.
+            r["ships"] = prec == "fp32" or (ratio <= SIZE_RATIO_MAX and not dominated)
+            r["skip_reason"] = None if r["ships"] else (
+                "dominated" if dominated else "no_size_gain")
         elif not r["gate_pass"]:
             r["ships"], r["skip_reason"] = False, "quality"
         elif prec == "fp32":

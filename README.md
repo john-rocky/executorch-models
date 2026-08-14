@@ -31,6 +31,7 @@ measured on a real image.
 | [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9998) | Apache-2.0 |
 | [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9688) | BSD-3 |
 | [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | 55.5 (1.0000) | **35.5** (1.0000) | Apache-2.0 |
+| [MoGe-2 ViT-S](https://huggingface.co/mlboydaisuke/MoGe-2-ViT-S-ExecuTorch) | point map + normals + mask + scale | 141 | 96.6 | **76.4** | MIT |
 | [DINOv2 ViT-S/14](https://huggingface.co/mlboydaisuke/DINOv2-ViT-S14-ExecuTorch) | feature extraction | 88 | 44.8 (0.9999) | **24.9** (0.9980) | Apache-2.0 |
 | [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | MIT |
 | [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | 24.4 (1.0000) | **6.8** (0.9999) | Apache-2.0 |
@@ -66,6 +67,7 @@ produces them:
 | MobileSAM encoder | embedding cosine | 1.000 |
 | Depth-Anything-V2 | delta-1 vs fp32 | 0.994 |
 | Whisper encoder | hidden-state cosine | 0.9993 |
+| MoGe-2 | point map / normals cosine | 0.999 |
 
 One build did not survive and was withdrawn: U²-Net's int8 shrinks weak saliency
 badly (mask IoU 0.21 at worst) where correlation read 0.98.
