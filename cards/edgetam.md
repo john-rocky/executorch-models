@@ -8,6 +8,15 @@ decoder once per click.
 - `edgetam_decoder_xnnpack_fp32.pte` (24.7 MB) — (image_embed, feat_s0, feat_s1,
   points (1,1,N,2) fp32 pixel coords in 1024-space, labels (1,1,N) int64 1=fg/0=bg)
   → mask logits (1,1,3,256,256), iou scores (1,1,3)
+- `edgetam_decoder_xnnpack_fp16.pte` (12.6 MB) — the same decoder at half the size,
+  corr 1.000000 against fp32 eager. It takes and returns fp32 tensors, so pairing it
+  with the fp32 encoder needs no app changes.
+
+The encoder ships in fp32 only, and that is not an omission. Its backbone is RepViT,
+which is convolutional, and XNNPACK serializes convolution weights as fp32 whatever
+dtype the graph carries — fp16 came out at 19.8 MB (100.5%) and dynamic int8 at
+19.7 MB, so neither buys anything. At 19.7 MB the fp32 encoder is already smaller
+than SAM 2.1 hiera-tiny's *fp16* encoder (55.6 MB).
 
 EdgeTAM is Meta's on-device SAM 2 (CVPR 2025). Its encoder is **5.5× smaller than
 SAM 2.1 hiera-tiny's** (19.7 MB vs 109.2 MB) for the same output contract, so an

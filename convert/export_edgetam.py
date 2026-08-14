@@ -98,6 +98,7 @@ precisions = sys.argv[1:] or ["fp32"]
 for prec in precisions:
     convert_and_gate(
         "edgetam_encoder", enc, (pixel_values,), runs=5, precision=prec,
+        int8_dynamic=True,  # transformer-heavy: static int8 wrecks attention
         extra_meta={
             "source": CKPT,
             "license": "Apache-2.0",
@@ -107,6 +108,7 @@ for prec in precisions:
     )
     convert_and_gate(
         "edgetam_decoder", dec, (ie, s0, s1, points, labels), runs=10, precision=prec,
+        int8_dynamic=True,
         extra_meta={
             "source": CKPT,
             "license": "Apache-2.0",

@@ -23,9 +23,9 @@ measured on a real image.
 
 | Model | Task | fp32 | fp16 | int8 | License |
 |-------|------|------|------|------|---------|
-| [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | — | — | Apache-2.0 |
-| [MobileSAM](https://huggingface.co/mlboydaisuke/MobileSAM-ExecuTorch) | promptable segmentation | 28.3 enc + 20.5 dec | — | — | Apache-2.0 / MIT |
-| [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | — | — | Apache-2.0 |
+| [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | 12.6 dec | — | Apache-2.0 |
+| [MobileSAM](https://huggingface.co/mlboydaisuke/MobileSAM-ExecuTorch) | promptable segmentation | 28.3 enc + 20.5 dec | 10.5 dec | **14.0 enc** | Apache-2.0 / MIT |
+| [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | 55.6 enc + 12.6 dec | — | Apache-2.0 |
 | [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | Apache-2.0 |
 | [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
 | [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9988) | Apache-2.0 |

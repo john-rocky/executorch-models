@@ -127,24 +127,32 @@ def bake_transformer_pe(transformer, image_pe):
     fully portable, with every op verified correct in isolation. Precomputing the
     same tensor and handing the transformer the already-flat version restores
     corr 1.000000. Same class as the SAM 2.1 constant-subgraph bake.
-    """
-    flat_pe = image_pe.flatten(2).permute(0, 2, 1).contiguous()
-    orig_forward = transformer.forward
 
-    def forward(image_embedding, image_pe_arg, point_embedding):
-        bs, c, h, w = image_embedding.shape
+    Patching happens on the class and the tensor lives in a buffer, both
+    deliberately. A closure over the module instance would survive
+    `copy.deepcopy(model).half()` still pointing at the *original* fp32 module,
+    so the fp16 export would meet an fp32 constant ("expected scalar type
+    torch.float16 but found torch.float32"); going through `self` lets each copy
+    read its own converted buffer.
+    """
+    transformer.register_buffer(
+        "flat_pe", image_pe.flatten(2).permute(0, 2, 1).contiguous())
+    cls = type(transformer)
+    orig_forward = cls.forward
+
+    def forward(self, image_embedding, image_pe_arg, point_embedding):
         image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
         queries, keys = point_embedding, image_embedding
-        for layer in transformer.layers:
+        for layer in self.layers:
             queries, keys = layer(queries=queries, keys=keys,
-                                  query_pe=point_embedding, key_pe=flat_pe)
+                                  query_pe=point_embedding, key_pe=self.flat_pe)
         q = queries + point_embedding
-        k = keys + flat_pe
-        attn_out = transformer.final_attn_token_to_image(q=q, k=k, v=keys)
-        queries = transformer.norm_final_attn(queries + attn_out)
+        k = keys + self.flat_pe
+        attn_out = self.final_attn_token_to_image(q=q, k=k, v=keys)
+        queries = self.norm_final_attn(queries + attn_out)
         return queries, keys
 
-    transformer.forward = forward
+    cls.forward = forward
     return orig_forward
 
 
@@ -174,18 +182,28 @@ print(f"composition max_abs_diff vs stock modules: {comp:.3e}")
 assert comp < 1e-4, "wrapper composition diverges from the stock model"
 
 for prec in (sys.argv[1:] or ["fp32"]):
-    convert_and_gate(
-        "mobilesam_encoder", enc, (pixel_values,), runs=5, precision=prec,
-        extra_meta={
-            "source": "ChaoningZhang/MobileSAM + dhkim2810/MobileSAM weights",
-            "license": "Apache-2.0 (code) / MIT (weights)",
-            "preprocess": "RGB, SAM norm (mean 123.675/116.28/103.53, std 58.395/57.12/57.375), "
-                          "longest side 1024 then pad to 1024x1024",
-            "outputs": "image_embed [1,256,64,64]",
-        },
-    )
+    # The encoder is skipped in fp16: TinyViT does not survive half precision,
+    # and not because of anything ExecuTorch does — plain `model.half()` in eager
+    # already returns corr -0.37 against the fp32 model, with or without keeping
+    # the data-stat norms in fp32. The decoder is a plain transformer and halves
+    # fine, so it is still built.
+    if prec == "fp16":
+        print("skip encoder fp16: TinyViT is not fp16-safe in eager (corr -0.37)")
+    else:
+        convert_and_gate(
+            "mobilesam_encoder", enc, (pixel_values,), runs=5, precision=prec,
+            int8_dynamic=True,  # TinyViT: static int8 wrecks attention
+            extra_meta={
+                "source": "ChaoningZhang/MobileSAM + dhkim2810/MobileSAM weights",
+                "license": "Apache-2.0 (code) / MIT (weights)",
+                "preprocess": "RGB, SAM norm (mean 123.675/116.28/103.53, std 58.395/57.12/57.375), "
+                              "longest side 1024 then pad to 1024x1024",
+                "outputs": "image_embed [1,256,64,64]",
+            },
+        )
     convert_and_gate(
         "mobilesam_decoder", dec, (ie, points, labels), runs=10, precision=prec,
+        int8_dynamic=True,
         extra_meta={
             "source": "ChaoningZhang/MobileSAM + dhkim2810/MobileSAM weights",
             "license": "Apache-2.0 (code) / MIT (weights)",

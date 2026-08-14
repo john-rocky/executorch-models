@@ -9,6 +9,20 @@ per click):
   points (1,1,N,2) fp32 pixel coords in 1024-space, labels (1,1,N) int64 1=fg/0=bg)
   → mask logits (1,1,3,256,256), iou scores (1,1,3)
 
+Both graphs also ship in fp16, and both hold their accuracy there:
+
+- `sam21_tiny_encoder_xnnpack_fp16.pte` (55.6 MB, corr 0.999993)
+- `sam21_tiny_decoder_xnnpack_fp16.pte` (12.6 MB, corr 0.999999)
+
+Every file takes and returns fp32 tensors, so precision is a file swap — the fp16
+pair is 68.2 MB against 133.9 MB. Hiera is attention-heavy, which is why fp16 halves
+it cleanly; dynamic int8 was measured too and is not published, since it leaves the
+convolutional parts in fp32 and came out at the full 109.2 MB for the encoder.
+
+If size is the binding constraint, look at
+[EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) — same output
+contract, 19.7 MB encoder.
+
 - **Source**: facebook/sam2.1-hiera-tiny (transformers Sam2Model)
 - **License**: Apache-2.0
 - **Preprocess**: RGB/255, imagenet norm (mean .485/.456/.406, std .229/.224/.225),

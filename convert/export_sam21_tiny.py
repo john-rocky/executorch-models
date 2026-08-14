@@ -109,9 +109,15 @@ comp = (masks.reshape(-1) - ref.pred_masks.reshape(-1)).abs().max().item()
 print(f"composition max_abs_diff vs full model: {comp:.3e}")
 assert comp < 1e-4, "wrapper composition diverges from Sam2Model forward"
 
-if "--dec-only" not in sys.argv:
+# PRECISIONS env var, not argv: this script already parses --dec-only/--exclude/etc.
+PRECISIONS = os.environ.get("PRECISIONS", "fp32").split(",")
+
+for prec in PRECISIONS:
+    if "--dec-only" in sys.argv:
+        break
     convert_and_gate(
-        "sam21_tiny_encoder", enc, (pixel_values,), runs=5,
+        "sam21_tiny_encoder", enc, (pixel_values,), runs=5, precision=prec,
+        int8_dynamic=True,  # Hiera is attention-heavy: static int8 wrecks it
         extra_meta={
             "source": CKPT,
             "license": "Apache-2.0",
@@ -135,15 +141,18 @@ elif "--portable" in sys.argv:
 else:
     dec_partitioner = None
 
-convert_and_gate(
-    "sam21_tiny_decoder", dec, (ie, s0, s1, points, labels), runs=10,
-    partitioner=dec_partitioner,
-    skip_dim_order="--skip-dim-order" in sys.argv,
-    extra_meta={
-        "source": CKPT,
-        "license": "Apache-2.0",
-        "preprocess": "points: pixel coords in 1024x1024 space [1,1,N,2] fp32; "
-                      "labels [1,1,N] int64 (1=fg, 0=bg); prompt encoder embedded",
-        "outputs": "mask logits [1,1,3,256,256] (upsample 4x to 1024, >0 = fg), iou [1,1,3]",
-    },
-)
+for prec in PRECISIONS:
+    convert_and_gate(
+        "sam21_tiny_decoder", dec, (ie, s0, s1, points, labels), runs=10,
+        partitioner=dec_partitioner,
+        skip_dim_order="--skip-dim-order" in sys.argv,
+        precision=prec,
+        int8_dynamic=True,
+        extra_meta={
+            "source": CKPT,
+            "license": "Apache-2.0",
+            "preprocess": "points: pixel coords in 1024x1024 space [1,1,N,2] fp32; "
+                          "labels [1,1,N] int64 (1=fg, 0=bg); prompt encoder embedded",
+            "outputs": "mask logits [1,1,3,256,256] (upsample 4x to 1024, >0 = fg), iou [1,1,3]",
+        },
+    )

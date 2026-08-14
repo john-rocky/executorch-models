@@ -5,9 +5,23 @@ decoder once per click.
 
 - `mobilesam_encoder_xnnpack_fp32.pte` (28.3 MB) — image (1,3,1024,1024) →
   image_embed (1,256,64,64)
+- `mobilesam_encoder_xnnpack_int8.pte` (14.0 MB) — same, dynamically quantized,
+  corr 0.999880
 - `mobilesam_decoder_xnnpack_fp32.pte` (20.5 MB) — (image_embed,
   points (1,N,2) fp32 pixel coords in 1024-space, labels (1,N) fp32 1=fg/0=bg)
   → mask logits (1,3,256,256), iou scores (1,3)
+- `mobilesam_decoder_xnnpack_fp16.pte` (10.5 MB) — same decoder, corr 0.999825
+
+All four take and return fp32 tensors, so any encoder file pairs with any decoder
+file. The smallest working pair is 24.5 MB against 48.8 MB for fp32 throughout.
+
+The encoder has no fp16 build: TinyViT does not survive half precision, and not
+because of anything the conversion does — plain `model.half()` in eager already
+returns corr -0.37 against the fp32 model. Dynamic int8 is the size lever here
+instead, and it holds at corr 0.9999. The decoder has no int8 build for the opposite
+reason: it came out at 21.8 MB, larger than its own fp32 file, because a dynamically
+quantized transformer leaves the decoder's large constant positional embedding in
+fp32 and adds quantization metadata on top.
 
 MobileSAM is SAM with its ViT-H encoder replaced by TinyViT. Same prompt contract as
 the [SAM2.1](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) and

@@ -33,12 +33,20 @@ def load_variants(name):
             r["gate_pass"] = r["worst_corr"] >= CORR_GATE[prec]
             out[prec] = r
     base = out.get("fp32")
-    for prec, r in out.items():
+    for i, prec in enumerate(PRECISIONS):
+        r = out.get(prec)
+        if r is None:
+            continue
         ratio = r["size_mb"] / base["size_mb"] if base else 1.0
         r["size_ratio"] = ratio
+        # Every shipping variant above this one in the list is both more
+        # trustworthy and already published, so a variant that is not smaller
+        # than one of them is strictly dominated — no reason to pick it.
+        dominated = any(out[p]["ships"] and r["size_mb"] > SIZE_RATIO_MAX * out[p]["size_mb"]
+                        for p in PRECISIONS[:i] if p in out)
         if not r["gate_pass"]:
             r["ships"], r["skip_reason"] = False, "quality"
-        elif prec != "fp32" and ratio > SIZE_RATIO_MAX:
+        elif prec != "fp32" and (ratio > SIZE_RATIO_MAX or dominated):
             r["ships"], r["skip_reason"] = False, "no_size_gain"
         else:
             r["ships"], r["skip_reason"] = True, None
