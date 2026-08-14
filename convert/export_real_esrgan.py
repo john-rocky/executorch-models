@@ -71,6 +71,6 @@ for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
             "source": "xinntao/Real-ESRGAN release v0.2.5.0 (realesr-general-x4v3)",
             "license": "BSD-3-Clause",
             "preprocess": "RGB 0-1, 128x128 tile",
-            "outputs": "SR image [1,3,512,512] RGB 0-1",
+            "outputs": "SR image [1,3,512,512] RGB, nominally 0-1 but not clamped by the model — it overshoots on high-contrast edges. Clamp before display.",
         },
     )

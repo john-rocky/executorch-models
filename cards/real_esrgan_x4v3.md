@@ -3,7 +3,7 @@
 - **Source**: xinntao/Real-ESRGAN release v0.2.5.0 (realesr-general-x4v3)
 - **License**: BSD-3-Clause
 - **Input**: [[1, 3, 128, 128]] — RGB 0-1, 128x128 tile
-- **Output**: SR image [1,3,512,512] RGB 0-1
+- **Output**: SR image [1,3,512,512] RGB, nominally 0-1 but not clamped by the model — this one overshoots noticeably (measured: 5.5% of pixels outside 0-1, range -0.28 to 1.22 over ten tiles), which is ordinary ringing for a GAN upscaler. Clamp before display.
 
 ## Variants
 
