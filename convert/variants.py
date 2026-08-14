@@ -44,10 +44,18 @@ def load_variants(name):
         # than one of them is strictly dominated — no reason to pick it.
         dominated = any(out[p]["ships"] and r["size_mb"] > SIZE_RATIO_MAX * out[p]["size_mb"]
                         for p in PRECISIONS[:i] if p in out)
+        r["dominated_by"] = next(
+            (p for p in PRECISIONS[:i]
+             if p in out and out[p]["ships"]
+             and r["size_mb"] > SIZE_RATIO_MAX * out[p]["size_mb"]), None)
         if not r["gate_pass"]:
             r["ships"], r["skip_reason"] = False, "quality"
-        elif prec != "fp32" and (ratio > SIZE_RATIO_MAX or dominated):
+        elif prec == "fp32":
+            r["ships"], r["skip_reason"] = True, None
+        elif ratio > SIZE_RATIO_MAX:
             r["ships"], r["skip_reason"] = False, "no_size_gain"
+        elif dominated:
+            r["ships"], r["skip_reason"] = False, "dominated"
         else:
             r["ships"], r["skip_reason"] = True, None
     return out

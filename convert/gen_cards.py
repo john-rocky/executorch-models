@@ -18,6 +18,9 @@ SKIP_TEXT = {
         "weights as fp32 no matter what dtype the graph carries, so on a conv-heavy "
         "model fp16 saves no disk and only adds cast operations. Reach for int8 here, "
         "not fp16."),
+    "dominated": (
+        "- **{lab} is not shipped**: at {size} MB it is no smaller than the {dom} "
+        "build, which is also the more faithful of the two. Nothing would pick it."),
 }
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -71,10 +74,12 @@ def main():
                 vrows.append(f"| {label(prec, v)} | `{v['pte']}` | {v['size_mb']} | "
                              f"{v['worst_corr']:.6f} | {v['et_ms_median']} |")
             else:
+                dom = v.get("dominated_by")
                 failed_lines.append(SKIP_TEXT[v["skip_reason"]].format(
                     lab=label(prec, v), corr=v["worst_corr"], gate=CORR_GATE[prec],
                     pct=100 * v["size_ratio"], size=v["size_mb"],
-                    base=variants["fp32"]["size_mb"]))
+                    base=variants["fp32"]["size_mb"],
+                    dom=label(dom, variants[dom]) if dom else "smaller"))
         failed = ""
         if failed_lines:
             failed = "\n### Precisions that did not earn a slot\n\n" + \
