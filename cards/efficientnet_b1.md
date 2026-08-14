@@ -19,7 +19,7 @@ only, not a device number (torch eager fp32 on the same machine: 352.7 ms).
 
 ### Precisions that did not earn a slot
 
-- **int8 is not shipped**: worst-output corr 0.077 against fp32 eager, below the 0.95 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.
+- **int8 is not shipped**: measured in the units that matter for this model — fraction of images keeping the fp32 top-1 label: median 0.0000 over 10 real images, worst 0.0000.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 

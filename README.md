@@ -150,10 +150,15 @@ that encoder instead (28.3 → 14.0 MB at corr 0.9999).
 
 **Correlation is a first filter, not the verdict — finish with the task's own metric.** It misses in both directions. LaMa's int8 build clears the 0.95 bar at 0.958 and is 22 dB PSNR against fp32, which is visible degradation, so it is not published. EDSR's int8 reads 0.9999 and measures 47 dB, which really is invisible. 6DRepNet's reads 0.815 and works out to 46° of rotation error — a genuine failure, and the known one for re-parameterized RepVGG, whose fused branches leave weight ranges too wide for an int8 grid. Use PSNR for image-to-image, IoU for masks, degrees for pose, box/score agreement for detection.
 
-**Some models just do not quantize.** EfficientNet-B1 lands at corr 0.077 whether
-weights are per-channel or per-tensor, and whether the whole graph or only
-conv/linear is annotated — with 100% of its ops on the delegate, this is a
-quantization-accuracy limit, not a lowering bug. RT-DETRv2 and D-FINE break in fp16
+**Some models just do not quantize.** EfficientNet-B1's int8 build keeps the fp32
+top-1 label on 0 of 10 images, and the fp32 label is not even in its top-5. Neither
+per-tensor weights, nor annotating only conv/linear, nor leaving the squeeze-excite
+blocks in fp32 moves it, and 100% of its ops are on the delegate — this is a
+quantization-accuracy limit that wants cross-layer equalisation or QAT, not
+anything on the export side. Worth noting that locating the damage by correlating
+intermediate features does not work either: cut at successive stages it reads
+0.57, 0.39, 0.31, 0.17, 0.66 — non-monotonic, because correlation between post-SiLU
+feature maps means nothing. RT-DETRv2 and D-FINE break in fp16
 (corr 0.33 / 0.22) because their decoders refine boxes as
 `sigmoid(inverse_sigmoid(ref) + delta)`, which fp16 cannot resolve.
 

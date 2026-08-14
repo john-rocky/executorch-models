@@ -55,6 +55,11 @@ def simcc_keypoint_shift(out32, out8):
     return (decode(out32) - decode(out8)).abs().max().item()
 
 
+def top1_agreement(a, b):
+    """A classifier is judged by the label it returns, not by logit correlation."""
+    return float(a[0].argmax().item() == b[0].argmax().item())
+
+
 def cosine(a, b):
     """Embedding models are used through cosine similarity, so measure that
     rather than element-wise correlation."""
@@ -80,6 +85,8 @@ AUDITS = {
     "pidnet_s_cityscapes": ("street", 1024, "imagenet", "labels",
                             "fraction of pixels keeping their class", 0.95, {}),
     "edsr_base_x4": ("general", 128, "01", "psnr", "PSNR vs the fp32 .pte (dB)", 30.0, {}),
+    "efficientnet_b1": ("general", 240, "imagenet", "top1",
+                        "fraction of images keeping the fp32 top-1 label", 0.9, {}),
     # 30 dB is where a restoration result stops being visibly different; LaMa's
     # int8 build sits at 22 and is not published because of it.
     "lama_512": ("general", 512, "01", "psnr_masked", "PSNR vs the fp32 .pte (dB)",
@@ -242,6 +249,8 @@ def audit(name):
             vals.append(mask_iou(o32[0], o8[0]))
         elif metric == "labels":
             vals.append(label_agreement(o32[0], o8[0]))
+        elif metric == "top1":
+            vals.append(top1_agreement(o32[0], o8[0]))
         elif metric == "cosine":
             vals.append(cosine(o32[0], o8[0]))
         elif metric == "keypoints":
