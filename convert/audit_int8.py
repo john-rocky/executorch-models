@@ -44,6 +44,17 @@ def label_agreement(a, b):
     return (a.argmax(1) == b.argmax(1)).float().mean().item()
 
 
+def simcc_keypoint_shift(out32, out8):
+    """RTMPose emits two 1-D distributions per keypoint, not coordinates. What
+    matters is where the argmax lands, so decode both and report the largest
+    keypoint displacement in crop pixels (the split ratio is 2, hence the /2)."""
+    def decode(o):
+        x = o[0][0].argmax(dim=-1).float() / 2.0
+        y = o[1][0].argmax(dim=-1).float() / 2.0
+        return torch.stack([x, y], dim=-1)
+    return (decode(out32) - decode(out8)).abs().max().item()
+
+
 def cosine(a, b):
     """Embedding models are used through cosine similarity, so measure that
     rather than element-wise correlation."""

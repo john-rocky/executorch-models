@@ -45,6 +45,7 @@ measured on a real image.
 | [LaMa](https://huggingface.co/mlboydaisuke/LaMa-Inpainting-ExecuTorch) | inpainting (512x512) | 205 | — | — | Apache-2.0 |
 | [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | BSD-3 |
 | [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | MIT |
+| [RTMPose-s](https://huggingface.co/mlboydaisuke/RTMPose-s-Body-ExecuTorch) | 2D body pose (17 kpts) | **21.9** | — | — | Apache-2.0 |
 
 Every fp32 variant is corr 1.000000. A dash means that precision is not published —
 each model card explains the specific reason.
@@ -131,6 +132,8 @@ Depth-Anything-V2 to 0.493. Quantizing only `linear` dynamically brings the same
 models back to 0.998, 0.996 and 0.99998. Note that a *global* dynamic config also
 annotates convolutions, which XNNPACK cannot lower (`ChannelsLastTaggedReshapePass:
 required rank 4 tensor`), so scope it with `set_operator_type`.
+
+**Calibrate on the input the model is designed to consume.** Both detectors here were first quantized against landscape photos containing almost no COCO objects, which moved YOLOX's boxes by up to 12 px; re-calibrating on street scenes took its correlation from 0.9988 to 0.9998. RTMPose is the sharper case — it is top-down, so it wants a crop around one person, and on whole photographs the fp32 model produces no coherent pose at all. `convert/make_person_crops.py` builds that set by running the shipped YOLOX over the same photos.
 
 **Calibrate on imagery the model will actually meet.** Both detectors here were first quantized against landscape photos containing almost no COCO objects, which moved YOLOX's boxes by up to 12 px. Re-calibrating on street scenes — 653 firing detections instead of nearly none — took its correlation from 0.9988 to 0.9998 and its post-NMS agreement with fp32 to 94%.
 
