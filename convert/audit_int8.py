@@ -100,6 +100,11 @@ AUDITS = {
     # says nothing useful.
     "moge2_vits": ("general", 518, "imagenet", "geometry",
                    "cosine similarity of the point map and normals", 0.99, {}),
+    # Top-down pose: person crops, and judged in pixels. Lower is better here, so
+    # the threshold is negated (see the sign handling in audit()).
+    "rtmpose_s_body": ("person", (256, 192), "imagenet", "keypoints",
+                       "largest keypoint displacement against fp32, in crop pixels",
+                       -4.0, {}),
     # Detection audits need imagery that actually contains detections; the street
     # set carries 653 firings above 0.3 in YOLOX fp32, the general set almost none.
     "ssdlite320_mobilenetv3": ("street", 320, "01", "detect",
@@ -239,6 +244,8 @@ def audit(name):
             vals.append(label_agreement(o32[0], o8[0]))
         elif metric == "cosine":
             vals.append(cosine(o32[0], o8[0]))
+        elif metric == "keypoints":
+            vals.append(simcc_keypoint_shift(o32, o8))
         elif metric == "geometry":
             vals.append(min(cosine(o32[0], o8[0]), cosine(o32[1], o8[1])))
         elif metric == "depth":
@@ -251,7 +258,8 @@ def audit(name):
             vals.append(m / t if t else 1.0)
     n = len(vals)
     vals.sort()
-    med, worst = vals[n // 2], vals[0]
+    med = vals[n // 2]
+    worst = vals[-1] if thr < 0 else vals[0]
     if metric.startswith("detect"):
         # Pool across images rather than judging on the worst one. A single photo
         # where fp32 finds seven objects and int8 finds four reads 0.57 and says
@@ -260,10 +268,16 @@ def audit(name):
         summary = (f"{headline:.3f} of the fp32 build's detections are matched "
                    f"({sum(pooled_matched)} of {sum(pooled_total)} across {n} images), "
                    f"worst single image {worst:.3f}")
+    elif thr < 0:
+        # A "lower is better" metric: the threshold is stored negated, and the
+        # median is the honest headline (one bad frame should not decide).
+        headline = med
+        summary = f"median {med:.2f} over {n} images, worst {worst:.2f}"
     else:
         headline = worst
         summary = f"median {med:.4f} over {n} real images, worst {worst:.4f}"
-    verdict = "pass" if headline >= thr else "fail"
+    verdict = ("pass" if headline <= -thr else "fail") if thr < 0 else (
+        "pass" if headline >= thr else "fail")
     print(f"{name}: {unit} -> {headline:.4f} {verdict} ({summary})", flush=True)
     p = os.path.join(REPO, "results", f"{name}_int8.json")
     d = json.load(open(p))

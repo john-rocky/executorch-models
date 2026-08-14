@@ -19,7 +19,7 @@ only, not a device number (torch eager fp32 on the same machine: 34.3 ms).
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: keypoints move a median of 16 px and up to 41 px on a 192x256 crop (169 confident keypoints across 12 person crops). It also only saves 5% of the file, so there is nothing to weigh against that.
-- **int8 is not shipped**: keypoints move a median of 131 px on a 192x256 crop — the pose is gone. CSPNeXt's channel attention and the head's gated attention unit both resist post-training quantization; this needs QAT, not a different calibration set (re-calibrating on person crops rather than scenes made it worse, not better).
+- **int8 is not shipped**: measured in the units that matter for this model — largest keypoint displacement against fp32, in crop pixels: median 131.00 over 10 images, worst 163.50.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
