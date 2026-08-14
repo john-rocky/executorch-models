@@ -22,14 +22,21 @@ Everything here shipped as XNNPACK first, and XNNPACK is CPU-only. ExecuTorch al
 carries a Core ML backend that reaches the Neural Engine, and on the same device
 with the same deterministic input it is not a small difference:
 
-| Depth-Anything-V2-Small | median | size | delegated |
+| iPhone 17 Pro, same deterministic input | XNNPACK | Core ML | speedup |
 |---|---|---|---|
-| XNNPACK fp32 | 500.8 ms | 99.0 MB | 73.4% (50 subgraphs, 175 ops left on portable kernels) |
-| **Core ML** | **42.7 ms** | **50.2 MB** | **100% (369/369 ops, 1 subgraph)** |
+| MODNet 512² | 81.7 ms | **5.9 ms** | 13.9x |
+| Depth-Anything-V2-Small 518² | 500.8 ms | **42.7 ms** | 11.7x |
+| DINOv2 ViT-S/14 518² | 490.3 ms | **40.8 ms** | 12.0x |
+| ormbg 1024² | 292.8 ms | **24.5 ms** | 12.0x |
+| U²-Net 320² | 109.8 ms | **10.2 ms** | 10.7x |
+| EdgeTAM encoder 1024² | 66.5 ms | **12.2 ms** | 5.5x |
+| YOLOX-s 640² | 35.9 ms | **10.2 ms** | 3.5x |
 
-11.7x faster at half the size, with the output means agreeing to 0.13% — what fp16
-compute costs. Every fp16 and int8 change measured on this shelf was worth at most
-1.5x, so the whole quantization effort does not add up to one backend switch.
+Median 12x, never below 3.5x, at roughly half the file size, with outputs agreeing
+to within 3% on the mean — what fp16 compute costs. Depth-Anything-V2 goes from
+73.4% delegated across 50 subgraphs to 100% in a single one. Every fp16 and int8
+change measured on this shelf was worth at most 1.5x, so the whole quantization
+effort does not add up to one backend switch.
 
 Two things this does *not* mean. It does not mean XNNPACK was a mistake: the same
 `.pte` runs on Android, and Core ML files do not. And it does not mean the
