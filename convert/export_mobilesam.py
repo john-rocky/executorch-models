@@ -8,11 +8,11 @@ reused from that script.
 
   encoder: pixel (1,3,1024,1024) -> image_embed (1,256,64,64)
   decoder: (image_embed, points (1,N,2) px in 1024-space, labels (1,N))
-           -> masks (1,4,256,256) logits, iou (1,4)
+           -> masks (1,3,256,256) logits, iou (1,3)
 
-SAM v1 returns 4 masks with multimask_output (one whole-object + three parts),
-where SAM 2.1 returns 3 — that is the one contract difference against the other
-two repos.
+`multimask_output=True` returns 3 masks here, the same count as SAM 2.1: SAM v1's
+decoder predicts 4 and slices the first one off. Verified against the exported
+graph rather than assumed — see convert/verify_cards.py.
 """
 import sys, os
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -209,6 +209,6 @@ for prec in (sys.argv[1:] or ["fp32"]):
             "license": "Apache-2.0 (code) / MIT (weights)",
             "preprocess": "points: pixel coords in the padded 1024x1024 space [1,N,2] fp32; "
                           "labels [1,N] fp32 (1=fg, 0=bg, -1=pad); prompt encoder embedded",
-            "outputs": "mask logits [1,4,256,256] (upsample 4x to 1024, >0 = fg), iou [1,4]",
+            "outputs": "mask logits [1,3,256,256] (upsample 4x to 1024, >0 = fg), iou [1,3]",
         },
     )

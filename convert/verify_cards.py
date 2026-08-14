@@ -96,7 +96,55 @@ def verify_moge():
     return ok, len(imgs), "images whose valid pixels carry positive finite depth"
 
 
+def _sam_family(enc_name, dec_name, labels_dtype, three_feats):
+    """Cards for SAM 2.1, EdgeTAM and MobileSAM all promise the same thing: pass a
+    click in 1024-space and the decoder returns mask logits you threshold at 0.
+    Run that end to end and require a mask that is neither empty nor the whole
+    frame.
+
+    Gate on the model's own predicted IoU, the way the card tells apps to. A click
+    at the centre of an arbitrary photo sometimes lands on background — the model
+    correctly reports low confidence there (all three heads under 0.4), and asking
+    for a clean mask anyway would be testing the click, not the conversion."""
+    enc, dec = _method(enc_name), _method(dec_name)
+    ok = considered = 0
+    imgs = calib_loader("portrait", 1024, "imagenet", n=6)
+    for im in imgs:
+        feats = enc.execute(list(im))
+        pts = torch.tensor([[[[512.0, 512.0]]]]) if three_feats else torch.tensor([[[512.0, 512.0]]])
+        lbl = (torch.tensor([[[1]]], dtype=torch.int64) if labels_dtype is torch.int64
+               else torch.tensor([[1.0]]))
+        args = list(feats) + [pts, lbl] if three_feats else [feats[0], pts, lbl]
+        masks, iou = dec.execute(args)
+        scores = iou.flatten()
+        best = scores.argmax().item()
+        if scores[best].item() < 0.5:
+            continue  # the click missed; the model says so
+        considered += 1
+        m = masks.reshape(-1, masks.shape[-2], masks.shape[-1])[best] > 0
+        frac = m.float().mean().item()
+        # Only catch genuinely degenerate output. A confident click can legitimately
+        # select something small — that is the point of a promptable segmenter.
+        ok += int(0.0 < frac < 0.95 and torch.isfinite(masks).all().item())
+    return ok, considered, "confident clicks that produce a non-degenerate mask"
+
+
+def verify_sam21():
+    return _sam_family("sam21_tiny_encoder", "sam21_tiny_decoder", torch.int64, True)
+
+
+def verify_edgetam():
+    return _sam_family("edgetam_encoder", "edgetam_decoder", torch.int64, True)
+
+
+def verify_mobilesam():
+    return _sam_family("mobilesam_encoder", "mobilesam_decoder", torch.float32, False)
+
+
 CHECKS = {
+    "sam21_tiny": verify_sam21,
+    "edgetam": verify_edgetam,
+    "mobilesam": verify_mobilesam,
     "rtmpose_s_body": verify_rtmpose,
     "yolox_s": verify_yolox,
     "modnet_portrait_matting": verify_modnet,

@@ -167,8 +167,12 @@ correlation number noticing. This runs the documented recipe on real images and
 asserts something that must hold if it is right: RTMPose's SimCC decode has to put
 the nose above the shoulders and the shoulders above the hips, YOLOX's boxes have to
 land in-frame with positive area after NMS, MODNet's matte has to be neither empty
-nor the whole picture, MoGe's valid pixels have to carry positive finite depth. All
-four pass.
+nor the whole picture, MoGe's valid pixels have to carry positive finite depth, and a confident click on
+any of the three SAM-family repos has to return a mask that is neither empty nor the
+whole frame. All seven pass.
+
+It has already earned its place: MobileSAM's metadata claimed four mask outputs
+where the graph returns three, which no parity number would ever have flagged.
 
 ### Re-authoring helpers
 
