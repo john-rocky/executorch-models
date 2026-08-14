@@ -24,6 +24,7 @@ measured on a real image.
 | Model | Task | fp32 | fp16 | int8 | License |
 |-------|------|------|------|------|---------|
 | [EdgeTAM](https://huggingface.co/mlboydaisuke/EdgeTAM-ExecuTorch) | promptable segmentation | **19.7 enc + 24.7 dec** | — | — | Apache-2.0 |
+| [MobileSAM](https://huggingface.co/mlboydaisuke/MobileSAM-ExecuTorch) | promptable segmentation | 28.3 enc + 20.5 dec | — | — | Apache-2.0 / MIT |
 | [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | — | — | Apache-2.0 |
 | [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | Apache-2.0 |
 | [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
@@ -121,6 +122,12 @@ quantization-accuracy limit, not a lowering bug. RT-DETRv2 and D-FINE break in f
   Workaround: exclude `PreluConfig` from the partitioner (see `convert/export_twinlite.py`).
 - **Instruct LLMs need the chat template in benches too** — raw text returns
   `<|im_end|>` immediately and looks like broken generation.
+- **Reshaping a constant inside the graph can silently corrupt its consumer**:
+  MobileSAM's `TwoWayTransformer` opens with `image_pe.flatten(2).permute(0,2,1)`
+  on a tensor that is constant for a fixed image size. Left in the graph, layer 0's
+  keys come out at corr 0.78 against eager — with **no delegate involved**, and with
+  every operator (attention, LayerNorm, MLP, flatten+permute) exact when exported on
+  its own. Precompute the reshaped constant and pass it in as a buffer.
 - **Quantized `slice` can stop a delegate from loading**: if PT2E gives a slice
   output a scale different from its input's, `xnn_define_static_slice` returns
   `xnn_status_invalid_parameter` and the whole method fails to load
