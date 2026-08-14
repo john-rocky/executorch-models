@@ -73,6 +73,14 @@ SHIP = [
      "cards/lama_512.md", ["image-to-image", "inpainting"], None),
     ("MoGe-2-ViT-S-ExecuTorch", "mit", ["moge2_vits"],
      "cards/moge2_vits.md", ["depth-estimation", "image-to-3d"], "Ruicheng/moge-2-vits-normal"),
+    ("RTMPose-s-Body-ExecuTorch", "apache-2.0", ["rtmpose_s_body"],
+     "cards/rtmpose_s_body.md", ["keypoint-detection", "pose-estimation"], None),
+    ("RTMPose-m-Hand-ExecuTorch", "apache-2.0", ["rtmpose_m_hand"],
+     "cards/rtmpose_m_hand.md", ["keypoint-detection", "pose-estimation"], None),
+    ("RTMPose-m-Face-ExecuTorch", "apache-2.0", ["rtmpose_m_face"],
+     "cards/rtmpose_m_face.md", ["keypoint-detection", "pose-estimation"], None),
+    ("RTMPose-m-Animal-ExecuTorch", "apache-2.0", ["rtmpose_m_animal"],
+     "cards/rtmpose_m_animal.md", ["keypoint-detection", "pose-estimation"], None),
 ]
 
 

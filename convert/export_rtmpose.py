@@ -55,24 +55,44 @@ from calib import calib_loader
 from mmpose.models.backbones import CSPNeXt
 from mmpose.models.heads import RTMCCHead
 
-URL = ("https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/"
-       "rtmpose-s_simcc-body7_pt-body7_420e-256x192-acd4a1ef_20230504.pth")
-H, W = 256, 192
-CKPT = os.path.join(os.path.expanduser("~/.cache/executorch-convert"), "rtmpose_s.pth")
+BASE = "https://download.openmmlab.com/mmpose/v1/projects/rtmposev1/"
+# variant -> (checkpoint, size HxW, keypoints, model scale, calib set, what it crops)
+VARIANTS = {
+    "body": ("rtmpose-s_simcc-body7_pt-body7_420e-256x192-acd4a1ef_20230504.pth",
+             (256, 192), 17, "s", "person", "a person"),
+    "hand": ("rtmpose-m_simcc-hand5_pt-aic-coco_210e-256x256-74fb594_20230320.pth",
+             (256, 256), 21, "m", "person", "a hand"),
+    "face": ("rtmpose-m_simcc-face6_pt-in1k_120e-256x256-72a37400_20230529.pth",
+             (256, 256), 106, "m", "portrait", "a face"),
+    "animal": ("rtmpose-m_simcc-ap10k_pt-aic-coco_210e-256x256-7a041aa1_20230206.pth",
+               (256, 256), 17, "m", "general", "an animal"),
+}
+# Positional args are precisions; --variant selects which model to build.
+VARIANT = "body"
+for i, a in enumerate(sys.argv):
+    if a == "--variant":
+        VARIANT = sys.argv[i + 1]
+CKPT_NAME, (H, W), NUM_KPT, SCALE, CALIB, CROP_OF = VARIANTS[VARIANT]
+URL = BASE + CKPT_NAME
+CKPT = os.path.join(os.path.expanduser("~/.cache/executorch-convert"),
+                    f"rtmpose_{VARIANT}.pth")
+# CSPNeXt widths: rtmpose-s is 0.33/0.50, rtmpose-m is 0.67/0.75.
+DEEPEN, WIDEN, FEAT = ((0.33, 0.5, 512) if SCALE == "s" else (0.67, 0.75, 768))
 
 
 class RTMPose(nn.Module):
-    """backbone -> SimCC head. Config values are the ones in the checkpoint's own
-    training config (rtmpose-s, 17 keypoints, 2x simcc split)."""
+    """backbone -> SimCC head, with the widths and keypoint count of whichever
+    variant is selected. A strict state_dict load is what proves the numbers
+    above match the checkpoint."""
 
     def __init__(self):
         super().__init__()
         self.backbone = CSPNeXt(
-            arch="P5", expand_ratio=0.5, deepen_factor=0.33, widen_factor=0.5,
+            arch="P5", expand_ratio=0.5, deepen_factor=DEEPEN, widen_factor=WIDEN,
             out_indices=(4,), channel_attention=True,
             norm_cfg=dict(type="SyncBN"), act_cfg=dict(type="SiLU"))
         self.head = RTMCCHead(
-            in_channels=512, out_channels=17, input_size=(W, H),
+            in_channels=FEAT, out_channels=NUM_KPT, input_size=(W, H),
             in_featuremap_size=(W // 32, H // 32), simcc_split_ratio=2.0,
             final_layer_kernel_size=7,
             gau_cfg=dict(hidden_dims=256, s=128, expansion_factor=2,
@@ -101,11 +121,13 @@ net.eval()
 # all, so calibrating there would fit activations the model never sees in use.
 # `convert/make_person_crops.py` builds the set by running the shipped YOLOX over
 # the street and portrait photos.
-batches = calib_loader("person", (H, W), "imagenet", n=12)
+batches = calib_loader(CALIB, (H, W), "imagenet", n=12)
 cal = lambda mod: [mod(*b) for b in batches]
-for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+precisions = [a for a in sys.argv[1:] if a in ("fp32", "fp16", "int8")] or ["fp32"]
+NAME = f"rtmpose_{SCALE}_{VARIANT}"
+for prec in precisions:
     convert_and_gate(
-        "rtmpose_s_body", net, (torch.randn(1, 3, H, W),),
+        NAME, net, (torch.randn(1, 3, H, W),),
         precision=prec,
         calibrate=cal if prec == "int8" else None,
         gate_inputs=batches[0],
@@ -115,12 +137,11 @@ for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
         # around it.
         int8_op_types=[torch.ops.aten.conv2d.default, torch.ops.aten.linear.default],
         extra_meta={
-            "source": "open-mmlab/mmpose RTMPose-s body7 "
-                      "(rtmpose-s_simcc-body7_pt-body7_420e-256x192)",
+            "source": f"open-mmlab/mmpose RTMPose ({CKPT_NAME.split('_2023')[0]})",
             "license": "Apache-2.0",
-            "preprocess": f"RGB, ImageNet norm, {H}x{W} person crop (detect first, "
-                          f"then crop and resize to this aspect)",
-            "outputs": f"SimCC pair: x [1,17,{W * 2}] and y [1,17,{H * 2}] — a 1-D "
+            "preprocess": f"RGB, ImageNet norm, {H}x{W} crop around {CROP_OF} "
+                          f"(detect first, then crop and resize to this aspect)",
+            "outputs": f"SimCC pair: x [1,{NUM_KPT},{W * 2}] and y [1,{NUM_KPT},{H * 2}] — a 1-D "
                        f"distribution per keypoint per axis. Decode: keypoint k sits "
                        f"at (argmax(x[k]) / 2, argmax(y[k]) / 2) in crop pixels; the "
                        f"max value doubles as the confidence.",

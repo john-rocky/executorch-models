@@ -46,6 +46,45 @@ def verify_rtmpose():
     return ok, len(crops), "skeletons in anatomical order"
 
 
+def _simcc_xy(m, im, n_kpt):
+    xs, ys = m.execute(list(im))
+    return (xs[0].argmax(-1).float() / 2.0, ys[0].argmax(-1).float() / 2.0,
+            torch.minimum(xs[0].max(-1).values, ys[0].max(-1).values))
+
+
+def verify_rtmpose_hand():
+    """The hand model wants a crop around one hand, and this repository has no hand
+    detector to make one — feeding it a person crop puts a whole body in frame, so
+    an anatomical check would be testing the input, not the conversion. What can be
+    checked without that data is the decode contract itself: 21 keypoints, both
+    axes landing inside the crop, finite confidences. The card states the detector
+    requirement; verifying the pose quality needs a hand dataset."""
+    m = _method("rtmpose_m_hand")
+    crops = calib_loader("person", (256, 256), "imagenet", n=8)
+    ok = 0
+    for im in crops:
+        x, y, conf = _simcc_xy(m, im, 21)
+        ok += int(x.numel() == 21 and y.numel() == 21 and
+                  0 <= x.min() and x.max() < 256 and 0 <= y.min() and y.max() < 256 and
+                  torch.isfinite(conf).all().item())
+    return ok, len(crops), "crops decoding to 21 in-frame keypoints"
+
+
+def verify_rtmpose_face():
+    """106-point face: the contour runs 0-32 along the jaw, and the eyes are
+    points 66-83. Eyes above the jawline is true of any upright face."""
+    m = _method("rtmpose_m_face")
+    crops = calib_loader("portrait", (256, 256), "imagenet", n=8)
+    ok = considered = 0
+    for im in crops:
+        x, y, conf = _simcc_xy(m, im, 106)
+        if conf.median().item() < 0.3:
+            continue
+        considered += 1
+        ok += int(y[66:84].mean().item() < y[0:33].mean().item())
+    return ok, considered, "faces with the eyes above the jaw contour"
+
+
 def verify_yolox():
     """Card says: cx,cy,w,h are in input pixels and NMS is required. If that is
     right, decoded boxes land inside the 640x640 frame and have positive area."""
@@ -276,6 +315,8 @@ CHECKS = {
     "edgetam": verify_edgetam,
     "mobilesam": verify_mobilesam,
     "rtmpose_s_body": verify_rtmpose,
+    "rtmpose_m_hand": verify_rtmpose_hand,
+    "rtmpose_m_face": verify_rtmpose_face,
     "yolox_s": verify_yolox,
     "modnet_portrait_matting": verify_modnet,
     "moge2_vits": verify_moge,

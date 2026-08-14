@@ -46,6 +46,9 @@ measured on a real image.
 | [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | BSD-3 |
 | [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | MIT |
 | [RTMPose-s](https://huggingface.co/mlboydaisuke/RTMPose-s-Body-ExecuTorch) | 2D body pose (17 kpts) | **21.9** | — | — | Apache-2.0 |
+| [RTMPose-m Hand](https://huggingface.co/mlboydaisuke/RTMPose-m-Hand-ExecuTorch) | hand pose (21 kpts) | 55.1 | — | — | Apache-2.0 |
+| [RTMPose-m Face](https://huggingface.co/mlboydaisuke/RTMPose-m-Face-ExecuTorch) | face landmarks (106 kpts) | 67.9 | — | — | Apache-2.0 |
+| [RTMPose-m Animal](https://huggingface.co/mlboydaisuke/RTMPose-m-Animal-ExecuTorch) | animal pose (17 kpts, AP-10K) | 54.5 | — | — | Apache-2.0 |
 
 Every fp32 variant is corr 1.000000. A dash means that precision is not published —
 each model card explains the specific reason.
