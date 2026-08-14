@@ -127,6 +127,19 @@ quantization-accuracy limit, not a lowering bug. RT-DETRv2 and D-FINE break in f
 (corr 0.33 / 0.22) because their decoders refine boxes as
 `sigmoid(inverse_sigmoid(ref) + delta)`, which fp16 cannot resolve.
 
+### Re-authoring helpers
+
+[`convert/fft_ops.py`](convert/fft_ops.py) — **inverse FFT that ExecuTorch can
+lower.** `torch.fft.rfftn` exports and runs; the inverse does not. Building a
+complex tensor hits `aten.complex`, which is outside the Core ATen opset, and
+`view_as_complex` lowers but then fails at runtime. For a fixed spatial size the
+inverse is a fixed linear map, so `IRFFT2` precomputes it as two real matmuls —
+exportable, delegatable, and 3.1 MB of matrices at 512x512. Verified against
+`torch.fft.irfftn` to ~1e-6, and a full Fast Fourier Convolution block round-trips
+at corr 1.000000 on both the portable kernels and XNNPACK. This is what unblocks
+the LaMa family. Keep real and imaginary parts as separate tensors so no complex
+value ever enters the graph.
+
 ### Hard-won notes (traps)
 
 - **channels_last poisoning (SAM2.1)**: transformers' `get_image_embeddings()`
