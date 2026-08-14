@@ -74,7 +74,7 @@ are thin wrappers that:
 
 ## Picking a precision
 
-Measured across all 14 vision models above, not guessed:
+Measured across every vision model above, not guessed:
 
 **fp16 only pays off on transformers.** XNNPACK serializes convolution weights as
 fp32 whatever dtype the graph carries (`op_conv2d.py` passes `force_fp32=True`), so
@@ -95,6 +95,12 @@ required rank 4 tensor`), so scope it with `set_operator_type`.
 it never saw, so parity measured on `torch.randn` reads far worse than the model
 actually is. `convert/calib.py` loads a small image set for calibration and for the
 parity gate.
+
+**When fp16 breaks, check the model in eager before blaming the conversion.**
+MobileSAM's TinyViT encoder returns corr -0.37 from a plain `model.half()` in eager,
+with no ExecuTorch involved — some architectures simply are not half-precision safe,
+and no amount of export-side work recovers that. Dynamic int8 was the answer for
+that encoder instead (28.3 → 14.0 MB at corr 0.9999).
 
 **Some models just do not quantize.** EfficientNet-B1 lands at corr 0.077 whether
 weights are per-channel or per-tensor, and whether the whole graph or only
