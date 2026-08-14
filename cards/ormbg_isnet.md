@@ -21,7 +21,7 @@ only, not a device number (torch eager fp32 on the same machine: 375.5 ms).
 
 Correlation is a first filter. These are the numbers that decide:
 
-- **int8** — measured in the units that matter for this model: mask IoU at 0.5, median 0.9994 over five real images (worst 0.9916) against the fp32 build.
+- **int8** — measured in the units that matter for this model — mask IoU at 0.5: median 0.9987 over 10 real images, worst 0.9868.
 
 ### Precisions that did not earn a slot
 

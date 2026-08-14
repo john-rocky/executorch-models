@@ -19,7 +19,7 @@ only, not a device number (torch eager fp32 on the same machine: 138.5 ms).
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: it comes out at 100% of the fp32 file (176.0 MB vs 176.0 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
-- **int8 is not shipped**: mask IoU 0.814 median and 0.212 at worst against fp32. The int8 build systematically shrinks weak saliency: on a photo where fp32 marks 2.2% of pixels foreground it marks 0.5%. On images with an unambiguous subject it agrees closely (0.99), but that is not a promise this model can make.
+- **int8 is not shipped**: measured in the units that matter for this model — mask IoU at 0.5: median 0.9888 over 10 real images, worst 0.2124.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 

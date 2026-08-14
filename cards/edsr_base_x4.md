@@ -21,7 +21,7 @@ only, not a device number (torch eager fp32 on the same machine: 77.9 ms).
 
 Correlation is a first filter. These are the numbers that decide:
 
-- **int8** — measured in the units that matter for this model: PSNR vs the fp32 .pte (dB), median 47.3870 over five real images (worst 47.2036) against the fp32 build.
+- **int8** — measured in the units that matter for this model — PSNR vs the fp32 .pte (dB): median 47.3870 over 10 real images, worst 43.1846.
 
 ### Precisions that did not earn a slot
 

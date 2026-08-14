@@ -12,20 +12,14 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 | precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `pidnet_s_cityscapes_xnnpack_fp32.pte` | 30.5 | 1.000000 | 27.6 |
-| int8 | `pidnet_s_cityscapes_xnnpack_int8.pte` | 7.9 | 0.998882 | 22.9 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 64.5 ms).
 
-### Checked in the task's own units
-
-Correlation is a first filter. These are the numbers that decide:
-
-- **int8** — 95.3% of pixels keep their class against fp32 (worst 90.0%). The flips are at class boundaries.
-
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: it comes out at 100% of the fp32 file (30.5 MB vs 30.5 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
+- **int8 is not shipped**: measured in the units that matter for this model — fraction of pixels keeping their class: median 0.9802 over 10 real images, worst 0.8997.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 

@@ -30,6 +30,20 @@ RESULTS_DIR = os.path.join(REPO, "results")
 CORR_GATE = {"fp32": 0.999, "fp16": 0.995, "int8": 0.95}
 
 
+def _require_contiguous(inputs, what):
+    """The ExecuTorch runtime reads an input tensor as if it were contiguous and
+    ignores its strides — no error, just wrong numbers. PyTorch honours strides,
+    so a non-contiguous input makes .pte and eager disagree and looks exactly
+    like a conversion bug. Anything built with `np.transpose(...)` without an
+    `ascontiguousarray` lands here."""
+    for i, t in enumerate(inputs):
+        if isinstance(t, torch.Tensor) and not t.is_contiguous():
+            raise ValueError(
+                f"{what}[{i}] is not contiguous (shape {tuple(t.shape)}, "
+                f"stride {t.stride()}). ExecuTorch ignores strides and would "
+                f"silently return garbage — call .contiguous() first.")
+
+
 def _flatten_outputs(out):
     if isinstance(out, torch.Tensor):
         return [out]
@@ -241,6 +255,8 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
 
     if gate_inputs is None:
         gate_inputs = example_inputs
+    _require_contiguous(example_inputs, "example_inputs")
+    _require_contiguous(gate_inputs, "gate_inputs")
     # Reference is always the fp32 eager model, whatever we export below.
     with torch.no_grad():
         ref = _flatten_outputs(model(*gate_inputs))

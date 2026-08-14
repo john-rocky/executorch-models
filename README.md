@@ -30,15 +30,15 @@ measured on a real image.
 | [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
 | [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9998) | Apache-2.0 |
 | [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9688) | BSD-3 |
-| [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | 55.5 (1.0000) | **35.5** (1.0000) | Apache-2.0 |
+| [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | **55.5** (1.0000) | — | Apache-2.0 |
 | [MoGe-2 ViT-S](https://huggingface.co/mlboydaisuke/MoGe-2-ViT-S-ExecuTorch) | point map + normals + mask + scale | 141 | 96.6 | **76.4** | MIT |
 | [DINOv2 ViT-S/14](https://huggingface.co/mlboydaisuke/DINOv2-ViT-S14-ExecuTorch) | feature extraction | 88 | 44.8 (0.9999) | **24.9** (0.9980) | Apache-2.0 |
 | [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | MIT |
-| [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | 24.4 (1.0000) | **6.8** (0.9999) | Apache-2.0 |
+| [MODNet](https://huggingface.co/mlboydaisuke/MODNet-ExecuTorch) | portrait matting | 26 | **24.4** (1.0000) | — | Apache-2.0 |
 | [ormbg (ISNet)](https://huggingface.co/mlboydaisuke/ormbg-ExecuTorch) | background removal | 176 | — | **44.3** (1.0000) | Apache-2.0 |
 | [DIS (IS-Net)](https://huggingface.co/mlboydaisuke/DIS-ISNet-ExecuTorch) | high-accuracy cutout | 176 | — | — | Apache-2.0 |
 | [U²-Net](https://huggingface.co/mlboydaisuke/U2Net-ExecuTorch) | salient object segmentation | 176 | — | — | Apache-2.0 |
-| [PIDNet-S](https://huggingface.co/mlboydaisuke/PIDNet-S-Cityscapes-ExecuTorch) | semantic segmentation | 31 | — | **7.9** (0.9989) | MIT |
+| [PIDNet-S](https://huggingface.co/mlboydaisuke/PIDNet-S-Cityscapes-ExecuTorch) | semantic segmentation | **31** | — | — | MIT |
 | [TwinLiteNet](https://huggingface.co/mlboydaisuke/TwinLiteNet-ExecuTorch) | drivable area + lanes | 1.8 | — | — | MIT |
 | [EDSR ×4](https://huggingface.co/mlboydaisuke/EDSR-x4-ExecuTorch) | super-resolution | 6.1 | — | **1.6** (0.9999) | Apache-2.0 |
 | [Real-ESRGAN x4v3](https://huggingface.co/mlboydaisuke/Real-ESRGAN-x4v3-ExecuTorch) | super-resolution | **4.9** | — | — | BSD-3 |
@@ -59,22 +59,32 @@ detection agreement for the detectors, cosine similarity for the embedding model
 delta-1 for depth. Those numbers are on the cards and `convert/audit_int8.py`
 produces them:
 
-| model | measured | result |
-|-------|----------|--------|
-| ormbg / MODNet | mask IoU | 0.999 / 0.992 |
-| DIS | mask IoU | 0.963 |
-| PIDNet | pixels keeping their class | 95.3% |
-| EDSR | PSNR | 47.4 dB |
-| SSDLite | firing detections agreeing | 99.9% |
+**The number below is the worst image, not the median.** A build is judged by how
+badly it can fail on an input you might feed it, so the gate reads the worst of ten
+real images — reporting the median here is what let three builds stay published
+after they had already failed.
+
+| model | measured | worst of 10 images |
+|-------|----------|--------------------|
+| ormbg | mask IoU | 0.987 |
+| EDSR | PSNR | 43.2 dB |
+| SSDLite | firing detections agreeing | 99.8% |
 | YOLOX | post-NMS detections matched | 93.8% |
 | DINOv2 / CLIP | embedding cosine | 0.997 / 0.996 |
 | MobileSAM encoder | embedding cosine | 1.000 |
-| Depth-Anything-V2 | delta-1 vs fp32 | 0.994 |
-| Whisper encoder | hidden-state cosine | 0.9993 |
-| MoGe-2 | point map / normals cosine | 0.999 |
+| Whisper encoder | hidden-state cosine | 0.999 |
+| MoGe-2 | point map / normals cosine | 1.000 |
 
-One build did not survive and was withdrawn: U²-Net's int8 shrinks weak saliency
-badly (mask IoU 0.21 at worst) where correlation read 0.98.
+Five int8 builds did not survive and were withdrawn. Correlation had cleared every
+one of them:
+
+| withdrawn | correlation said | the audit measured |
+|-----------|------------------|--------------------|
+| U²-Net | 0.980 | mask IoU 0.21 |
+| DIS | 0.987 | mask IoU 0.46 |
+| MODNet | 1.000 | mask IoU 0.60 |
+| PIDNet-S | 0.999 | 90.0% of pixels keeping their class |
+| Depth-Anything-V2 | 1.000 | delta-1 0.975 |
 
 ### Audio
 

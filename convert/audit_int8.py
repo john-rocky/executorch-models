@@ -18,6 +18,7 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import torch
 from calib import calib_loader
+from harness import _require_contiguous
 from executorch.runtime import Runtime
 
 REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -25,7 +26,19 @@ REPO = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 def _load(name, prec):
     p = os.path.join(REPO, "pte", f"{name}_xnnpack_{prec}.pte")
-    return Runtime.get().load_program(p).load_method("forward")
+    return _Guarded(Runtime.get().load_program(p).load_method("forward"))
+
+
+class _Guarded:
+    """ExecuTorch ignores input strides, so a non-contiguous tensor returns
+    garbage with no error — and an audit run on garbage withdraws good models."""
+
+    def __init__(self, method):
+        self._m = method
+
+    def execute(self, inputs):
+        _require_contiguous(inputs, "execute inputs")
+        return self._m.execute(inputs)
 
 
 def psnr(a, b):

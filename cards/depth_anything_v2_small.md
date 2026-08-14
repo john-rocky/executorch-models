@@ -13,16 +13,13 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `depth_anything_v2_small_xnnpack_fp32.pte` | 99.0 | 1.000000 | 167.3 |
 | fp16 | `depth_anything_v2_small_xnnpack_fp16.pte` | 55.5 | 0.999992 | 289.7 |
-| int8 (dynamic) | `depth_anything_v2_small_xnnpack_int8.pte` | 35.5 | 0.999979 | 166.2 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 85.0 ms).
 
-### Checked in the task's own units
+### Precisions that did not earn a slot
 
-Correlation is a first filter. These are the numbers that decide:
-
-- **int8 (dynamic)** — delta-1 against the fp32 build is 0.994 median over ten real images and 0.975 at worst — for reference, depth models report delta-1 near 0.95 against ground truth, so the quantization error sits well inside the model's own error.
+- **int8 (dynamic) is not shipped**: measured in the units that matter for this model — fraction of pixels within 1.25x of the fp32 depth: median 0.9941 over 10 real images, worst 0.9748.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
