@@ -47,6 +47,18 @@ measured on a real image.
 Every fp32 variant is corr 1.000000. A dash means that precision is not published —
 each model card explains the specific reason.
 
+### Audio
+
+| Model | Task | fp32 | fp16 | int8 | License |
+|-------|------|------|------|------|---------|
+| [Whisper-tiny](https://huggingface.co/mlboydaisuke/Whisper-tiny-ExecuTorch) | speech recognition | 32.9 enc + 198 dec | 17.6 enc + 99.1 dec | **11.7 enc** | Apache-2.0 |
+
+Split encoder/decoder: the encoder runs once per 30-second window, the decoder once
+per generated token. Static 128-token window, no KV cache — a greedy step is argmax,
+append, re-run. The decoder `.pte` is larger than its 118 MB of weights because
+Whisper's tied vocabulary matrix needs two representations in one file: an embedding
+table to index and a delegate-packed copy for the output matmul.
+
 ### LLM (8da4w + 8-bit embedding, iPhone 17 Pro measured)
 
 | Model | .pte | Decode (on-device) | License |

@@ -66,6 +66,9 @@ SHIP = [
      "cards/real_esrgan_x4v3.md", ["image-to-image", "super-resolution"], None),
     ("6DRepNet-HeadPose-ExecuTorch", "mit", ["sixdrepnet_headpose"],
      "cards/sixdrepnet_headpose.md", ["image-classification", "head-pose-estimation"], None),
+    ("Whisper-tiny-ExecuTorch", "apache-2.0",
+     ["whisper_tiny_encoder", "whisper_tiny_decoder"],
+     "cards/whisper_tiny.md", ["automatic-speech-recognition"], "openai/whisper-tiny"),
 ]
 
 
