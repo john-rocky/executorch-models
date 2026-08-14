@@ -157,6 +157,19 @@ quantization-accuracy limit, not a lowering bug. RT-DETRv2 and D-FINE break in f
 (corr 0.33 / 0.22) because their decoders refine boxes as
 `sigmoid(inverse_sigmoid(ref) + delta)`, which fp16 cannot resolve.
 
+### Verifying the cards, not just the weights
+
+[`convert/verify_cards.py`](convert/verify_cards.py) — the parity gate proves a
+`.pte` matches its PyTorch model and says nothing about whether the preprocessing
+and decoding written on the card are right. Those are what an app copies, and a card
+documenting the wrong normalisation ships a model nobody can use without any
+correlation number noticing. This runs the documented recipe on real images and
+asserts something that must hold if it is right: RTMPose's SimCC decode has to put
+the nose above the shoulders and the shoulders above the hips, YOLOX's boxes have to
+land in-frame with positive area after NMS, MODNet's matte has to be neither empty
+nor the whole picture, MoGe's valid pixels have to carry positive finite depth. All
+four pass.
+
 ### Re-authoring helpers
 
 [`convert/fft_ops.py`](convert/fft_ops.py) — **inverse FFT that ExecuTorch can
