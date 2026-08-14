@@ -27,13 +27,26 @@ class Decoded(torch.nn.Module):
 
 
 x = torch.randn(1, 3, 640, 640)
-convert_and_gate(
-    "yolox_s", Decoded(model), (x,),
-    extra_meta={
-        "source": "Megvii-BaseDetection/YOLOX (yolox_s)",
-        "license": "Apache-2.0",
-        "preprocess": "BGR 0..255 float, NO normalization (YOLOX v0.3+ convention), 640x640 letterbox pad 114",
-        "outputs": "[1,8400,85]: cx,cy,w,h (input px), objectness, 80 class scores; "
-                   "postprocess = obj*cls threshold + NMS (required)",
-    },
-)
+from calib import calib_loader
+
+batches = calib_loader("general", 640, "255", bgr=True)
+cal = lambda mod: [mod(*b) for b in batches]
+for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+    convert_and_gate(
+        "yolox_s", Decoded(model), (x,),
+        precision=prec,
+        calibrate=cal if prec == "int8" else None,
+        gate_inputs=batches[0],
+        # The head's grid decode carries int64 tensors; a global int8 annotation
+        # sends those to the histogram observer ("histogram_cpu not implemented
+        # for 'Long'"). Annotating conv/linear only sidesteps it and still gets
+        # 35.9 -> 9.2 MB at corr 0.999.
+        int8_op_types=[torch.ops.aten.conv2d.default, torch.ops.aten.linear.default],
+        extra_meta={
+            "source": "Megvii-BaseDetection/YOLOX (yolox_s)",
+            "license": "Apache-2.0",
+            "preprocess": "BGR 0..255 float, NO normalization (YOLOX v0.3+ convention), 640x640 letterbox pad 114",
+            "outputs": "[1,8400,85]: cx,cy,w,h (input px), objectness, 80 class scores; "
+                       "postprocess = obj*cls threshold + NMS (required)",
+        },
+    )

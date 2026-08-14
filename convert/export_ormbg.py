@@ -26,15 +26,23 @@ class Wrap(nn.Module):
         return self.n(x)[0][0]  # sigmoid(d1) main mask
 
 
-convert_and_gate(
-    "ormbg_isnet",
-    Wrap(net).eval(),
-    (torch.rand(1, 3, 1024, 1024),),
-    runs=5,
-    extra_meta={
-        "source": "schirrmacher/ormbg",
-        "license": "Apache-2.0",
-        "preprocess": "RGB 0-1, 1024x1024",
-        "outputs": "alpha mask [1,1,1024,1024] 0-1 (sigmoid)",
-    },
-)
+from calib import calib_loader
+
+batches = calib_loader("portrait", 1024, "01")
+cal = lambda mod: [mod(*b) for b in batches]
+for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+    convert_and_gate(
+        "ormbg_isnet",
+        Wrap(net).eval(),
+        (torch.rand(1, 3, 1024, 1024),),
+        runs=5,
+        precision=prec,
+        calibrate=cal if prec == "int8" else None,
+        gate_inputs=batches[0],
+        extra_meta={
+            "source": "schirrmacher/ormbg",
+            "license": "Apache-2.0",
+            "preprocess": "RGB 0-1, 1024x1024",
+            "outputs": "alpha mask [1,1,1024,1024] 0-1 (sigmoid)",
+        },
+    )

@@ -23,13 +23,21 @@ class RawHead(torch.nn.Module):
 CKPT = "ustc-community/dfine-small-coco"
 model = DFineForObjectDetection.from_pretrained(CKPT)
 x = torch.randn(1, 3, 640, 640)
-convert_and_gate(
-    "dfine_s_coco", RawHead(model), (x,), strip_asserts=True,
-    extra_meta={
-        "source": CKPT,
-        "license": "Apache-2.0",
-        "preprocess": "RGB/255 only (no mean/std norm), 640x640",
-        "outputs": "logits [1,300,80] (sigmoid -> per-class score), boxes [1,300,4] "
-                   "cxcywh normalized 0..1; postprocess = sigmoid + top-k, NO NMS",
-    },
-)
+from calib import calib_loader
+
+batches = calib_loader("general", 640, "01")
+cal = lambda mod: [mod(*b) for b in batches]
+for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+    convert_and_gate(
+        "dfine_s_coco", RawHead(model), (x,), strip_asserts=True,
+        precision=prec,
+        calibrate=cal if prec == "int8" else None,
+        gate_inputs=batches[0],
+        extra_meta={
+            "source": CKPT,
+            "license": "Apache-2.0",
+            "preprocess": "RGB/255 only (no mean/std norm), 640x640",
+            "outputs": "logits [1,300,80] (sigmoid -> per-class score), boxes [1,300,4] "
+                       "cxcywh normalized 0..1; postprocess = sigmoid + top-k, NO NMS",
+        },
+    )

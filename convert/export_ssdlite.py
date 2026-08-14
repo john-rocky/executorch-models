@@ -30,14 +30,22 @@ class SSDRaw4D(nn.Module):
 
 m = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.COCO_V1)
 x = torch.randn(1, 3, 320, 320)
-convert_and_gate(
-    "ssdlite320_mobilenetv3",
-    SSDRaw4D(m),
-    (x,),
-    extra_meta={
-        "source": "torchvision ssdlite320_mobilenet_v3_large COCO_V1",
-        "license": "BSD-3-Clause",
-        "preprocess": "RGB 0-1, 320x320 (torchvision SSDLite norm baked in model)",
-        "outputs": "12 raw heads: (cls [1,A*91,H,W], box [1,A*4,H,W]) x 6 levels, H=W in {20,10,5,3,2,1}",
-    },
-)
+from calib import calib_loader
+
+batches = calib_loader("general", 320, "01")
+cal = lambda mod: [mod(*b) for b in batches]
+for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+    convert_and_gate(
+        "ssdlite320_mobilenetv3",
+        SSDRaw4D(m),
+        (x,),
+        precision=prec,
+        calibrate=cal if prec == "int8" else None,
+        gate_inputs=batches[0],
+        extra_meta={
+            "source": "torchvision ssdlite320_mobilenet_v3_large COCO_V1",
+            "license": "BSD-3-Clause",
+            "preprocess": "RGB 0-1, 320x320 (torchvision SSDLite norm baked in model)",
+            "outputs": "12 raw heads: (cls [1,A*91,H,W], box [1,A*4,H,W]) x 6 levels, H=W in {20,10,5,3,2,1}",
+        },
+    )

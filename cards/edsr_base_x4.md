@@ -1,22 +1,36 @@
 # edsr_base_x4 — ExecuTorch XNNPACK
 
-`edsr_base_x4_xnnpack_fp32.pte` (6.1 MB, fp32, XNNPACK-delegated)
-
 - **Source**: eugenesiow/edsr-base (super-image)
 - **License**: Apache-2.0
 - **Input**: [[1, 3, 128, 128]] — RGB 0-1, 128x128 tile
 - **Output**: SR image [1,3,512,512] RGB 0-1
 
-## Verification (Mac arm64, executorch 1.4.0, torch 2.13.0)
+## Variants
 
-Parity vs torch fp32 eager on random input:
+All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
+
+| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+|-----------|------|-----------|------------------------------------|------------------|
+| fp32 | `edsr_base_x4_xnnpack_fp32.pte` | 6.1 | 1.000000 | 38.9 |
+| int8 | `edsr_base_x4_xnnpack_int8.pte` | 1.6 | 0.999918 | 28.3 |
+
+\*Mac arm64, single process, median of 10 — a reference point for relative cost
+only, not a device number (torch eager fp32 on the same machine: 77.9 ms).
+
+### Precisions that did not earn a slot
+
+- **fp16 is not shipped**: it comes out at 100% of the fp32 file (6.1 MB vs 6.1 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
+
+## Verification (executorch 1.4.0, torch 2.13.0)
+
+Parity is measured against the fp32 eager model on real image input; `corr` is
+the correlation over all elements of each output tensor.
 
 | output | shape | max_abs_diff | corr |
 |--------|-------|--------------|------|
-| 0 | [1, 3, 512, 512] | 3.576e-06 | 1.000000 |
+| 0 | [1, 3, 512, 512] | 1.788e-06 | 1.000000 |
 
-Median latency over 10 runs (single Mac process, reference only — device numbers to follow):
-ExecuTorch 39.6 ms vs torch eager 78.2 ms.
+XNNPACK delegate coverage (fp32): 85.7% (96/112 ops); ops left on the portable kernels: `dim_order_ops._to_dim_order_copy.default` x16
 
 ## Conversion
 

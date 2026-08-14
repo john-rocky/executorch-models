@@ -1,33 +1,47 @@
 # ssdlite320_mobilenetv3 — ExecuTorch XNNPACK
 
-`ssdlite320_mobilenetv3_xnnpack_fp32.pte` (13.8 MB, fp32, XNNPACK-delegated)
-
 - **Source**: torchvision ssdlite320_mobilenet_v3_large COCO_V1
 - **License**: BSD-3-Clause
 - **Input**: [[1, 3, 320, 320]] — RGB 0-1, 320x320 (torchvision SSDLite norm baked in model)
 - **Output**: 12 raw heads: (cls [1,A*91,H,W], box [1,A*4,H,W]) x 6 levels, H=W in {20,10,5,3,2,1}
 
-## Verification (Mac arm64, executorch 1.4.0, torch 2.13.0)
+## Variants
 
-Parity vs torch fp32 eager on random input:
+All variants take and return fp32 tensors — swap the `.pte` file, keep your app code.
+
+| precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
+|-----------|------|-----------|------------------------------------|------------------|
+| fp32 | `ssdlite320_mobilenetv3_xnnpack_fp32.pte` | 13.8 | 1.000000 | 5.1 |
+| int8 | `ssdlite320_mobilenetv3_xnnpack_int8.pte` | 3.9 | 0.963558 | 4.9 |
+
+\*Mac arm64, single process, median of 10 — a reference point for relative cost
+only, not a device number (torch eager fp32 on the same machine: 115.3 ms).
+
+### Precisions that did not earn a slot
+
+- **fp16 is not shipped**: it comes out at 100% of the fp32 file (13.8 MB vs 13.8 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.
+
+## Verification (executorch 1.4.0, torch 2.13.0)
+
+Parity is measured against the fp32 eager model on real image input; `corr` is
+the correlation over all elements of each output tensor.
 
 | output | shape | max_abs_diff | corr |
 |--------|-------|--------------|------|
-| 0 | [1, 546, 20, 20] | 2.241e-05 | 1.000000 |
-| 1 | [1, 24, 20, 20] | 3.958e-05 | 1.000000 |
-| 2 | [1, 546, 10, 10] | 1.705e-05 | 1.000000 |
-| 3 | [1, 24, 10, 10] | 4.649e-06 | 1.000000 |
-| 4 | [1, 546, 5, 5] | 2.158e-05 | 1.000000 |
-| 5 | [1, 24, 5, 5] | 7.510e-06 | 1.000000 |
-| 6 | [1, 546, 3, 3] | 2.438e-05 | 1.000000 |
-| 7 | [1, 24, 3, 3] | 7.123e-06 | 1.000000 |
-| 8 | [1, 546, 2, 2] | 1.967e-05 | 1.000000 |
-| 9 | [1, 24, 2, 2] | 4.768e-06 | 1.000000 |
-| 10 | [1, 546, 1, 1] | 2.933e-05 | 1.000000 |
-| 11 | [1, 24, 1, 1] | 2.146e-06 | 1.000000 |
+| 0 | [1, 546, 20, 20] | 3.052e-05 | 1.000000 |
+| 1 | [1, 24, 20, 20] | 3.767e-05 | 1.000000 |
+| 2 | [1, 546, 10, 10] | 2.956e-05 | 1.000000 |
+| 3 | [1, 24, 10, 10] | 8.464e-06 | 1.000000 |
+| 4 | [1, 546, 5, 5] | 1.717e-05 | 1.000000 |
+| 5 | [1, 24, 5, 5] | 9.477e-06 | 1.000000 |
+| 6 | [1, 546, 3, 3] | 1.717e-05 | 1.000000 |
+| 7 | [1, 24, 3, 3] | 9.421e-06 | 1.000000 |
+| 8 | [1, 546, 2, 2] | 2.050e-05 | 1.000000 |
+| 9 | [1, 24, 2, 2] | 3.457e-06 | 1.000000 |
+| 10 | [1, 546, 1, 1] | 1.001e-05 | 1.000000 |
+| 11 | [1, 24, 1, 1] | 9.418e-06 | 1.000000 |
 
-Median latency over 10 runs (single Mac process, reference only — device numbers to follow):
-ExecuTorch 5.1 ms vs torch eager 117.3 ms.
+XNNPACK delegate coverage (fp32): 94.8% (289/305 ops); ops left on the portable kernels: `dim_order_ops._to_dim_order_copy.default` x16
 
 ## Conversion
 

@@ -33,15 +33,23 @@ class Wrap(nn.Module):
         return o[0] if isinstance(o, (list, tuple)) else o
 
 
-convert_and_gate(
-    "pidnet_s_cityscapes",
-    Wrap(net).eval(),
-    (torch.randn(1, 3, 1024, 1024),),
-    runs=5,
-    extra_meta={
-        "source": "XuJiacong/PIDNet + oenpu/PIDNet_S_enlight_friendly_onnx weights",
-        "license": "MIT",
-        "preprocess": "RGB, ImageNet norm, 1024x1024",
-        "outputs": "class logits [1,19,128,128] (argmax + upsample in app)",
-    },
-)
+from calib import calib_loader
+
+batches = calib_loader("street", 1024, "imagenet")
+cal = lambda mod: [mod(*b) for b in batches]
+for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
+    convert_and_gate(
+        "pidnet_s_cityscapes",
+        Wrap(net).eval(),
+        (torch.randn(1, 3, 1024, 1024),),
+        runs=5,
+        precision=prec,
+        calibrate=cal if prec == "int8" else None,
+        gate_inputs=batches[0],
+        extra_meta={
+            "source": "XuJiacong/PIDNet + oenpu/PIDNet_S_enlight_friendly_onnx weights",
+            "license": "MIT",
+            "preprocess": "RGB, ImageNet norm, 1024x1024",
+            "outputs": "class logits [1,19,128,128] (argmax + upsample in app)",
+        },
+    )
