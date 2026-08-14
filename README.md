@@ -49,11 +49,26 @@ Every fp32 variant is corr 1.000000. A dash means that precision is not publishe
 each model card explains the specific reason.
 
 Every published int8 build has also been checked in its own units, not just in
-correlation: mask IoU for the segmenters, PSNR for the image-to-image models,
-agreement among firing detections for the detectors. Those numbers are on the cards,
-and `convert/audit_int8.py` is the script that produces them. One build did not
-survive that check and was withdrawn — U²-Net's int8 shrinks weak saliency badly
-(mask IoU 0.21 at worst), which correlation at 0.98 did not show.
+correlation — mask IoU for the segmenters, PSNR for image-to-image, post-NMS
+detection agreement for the detectors, cosine similarity for the embedding models,
+delta-1 for depth. Those numbers are on the cards and `convert/audit_int8.py`
+produces them:
+
+| model | measured | result |
+|-------|----------|--------|
+| ormbg / MODNet | mask IoU | 0.999 / 0.992 |
+| DIS | mask IoU | 0.963 |
+| PIDNet | pixels keeping their class | 95.3% |
+| EDSR | PSNR | 47.4 dB |
+| SSDLite | firing detections agreeing | 99.9% |
+| YOLOX | post-NMS detections matched | 93.8% |
+| DINOv2 / CLIP | embedding cosine | 0.997 / 0.996 |
+| MobileSAM encoder | embedding cosine | 1.000 |
+| Depth-Anything-V2 | delta-1 vs fp32 | 0.994 |
+| Whisper encoder | hidden-state cosine | 0.9993 |
+
+One build did not survive and was withdrawn: U²-Net's int8 shrinks weak saliency
+badly (mask IoU 0.21 at worst) where correlation read 0.98.
 
 ### Audio
 

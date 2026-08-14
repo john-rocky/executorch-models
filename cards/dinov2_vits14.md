@@ -18,6 +18,12 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 50.8 ms).
 
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8 (dynamic)** — measured in the units that matter for this model — cosine similarity of the embeddings: median 0.9986 over 10 real images, worst 0.9965.
+
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
 Parity is measured against the fp32 eager model on real image input; `corr` is

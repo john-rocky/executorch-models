@@ -18,6 +18,12 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 85.0 ms).
 
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8 (dynamic)** — delta-1 against the fp32 build is 0.994 median over ten real images and 0.975 at worst — for reference, depth models report delta-1 near 0.95 against ground truth, so the quantization error sits well inside the model's own error.
+
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
 Parity is measured against the fp32 eager model on random input; `corr` is

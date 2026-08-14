@@ -44,6 +44,22 @@ def label_agreement(a, b):
     return (a.argmax(1) == b.argmax(1)).float().mean().item()
 
 
+def cosine(a, b):
+    """Embedding models are used through cosine similarity, so measure that
+    rather than element-wise correlation."""
+    return torch.nn.functional.cosine_similarity(
+        a.flatten(1).float(), b.flatten(1).float(), dim=1).min().item()
+
+
+def depth_delta1(a, b):
+    """Depth is judged by ratio, not difference: the fraction of pixels whose
+    predicted value is within 1.25x of the reference, the standard delta-1."""
+    x = a.flatten().float().abs().clamp_min(1e-6)
+    y = b.flatten().float().abs().clamp_min(1e-6)
+    ratio = torch.max(x / y, y / x)
+    return (ratio < 1.25).float().mean().item()
+
+
 # name -> (calib category, size, norm, metric, unit, pass threshold, extra kwargs)
 AUDITS = {
     "modnet_portrait_matting": ("portrait", 512, "pm1", "iou", "mask IoU at 0.5", 0.95, {}),
@@ -53,6 +69,17 @@ AUDITS = {
     "pidnet_s_cityscapes": ("street", 1024, "imagenet", "labels",
                             "fraction of pixels keeping their class", 0.95, {}),
     "edsr_base_x4": ("general", 128, "01", "psnr", "PSNR vs the fp32 .pte (dB)", 30.0, {}),
+    # Embedding models are consumed through cosine similarity; depth through ratio.
+    "dinov2_vits14": ("general", 518, "imagenet", "cosine",
+                      "cosine similarity of the embeddings", 0.99, {}),
+    "clip_vit_b32_image": ("general", 224, "clip", "cosine",
+                           "cosine similarity of the image embeddings", 0.99, {}),
+    "depth_anything_v2_small": ("general", 518, "imagenet", "depth",
+                                "fraction of pixels within 1.25x of the fp32 depth", 0.99, {}),
+    "mobilesam_encoder": ("portrait", 1024, "01", "cosine",
+                          "cosine similarity of the image embeddings", 0.99, {}),
+    "whisper_tiny_encoder": (None, None, None, "whisper",
+                             "decoded token sequences that match fp32", 0.99, {}),
     # Detection audits need imagery that actually contains detections; the street
     # set carries 653 firings above 0.3 in YOLOX fp32, the general set almost none.
     "ssdlite320_mobilenetv3": ("street", 320, "01", "detect",
@@ -117,8 +144,58 @@ def detect_agreement_yolox(out32, out8):
     return matched, len(b1)
 
 
+def audit_whisper():
+    """The only question that matters for the encoder is whether the transcript
+    changes, so decode greedily through the fp32 decoder from both encoders and
+    compare token sequences. Audio is synthesised rather than downloaded: what is
+    being compared is two encoders on identical input, and speech-like structure
+    is enough to exercise them."""
+    import torch as t
+    enc32, enc8 = _load("whisper_tiny_encoder", "fp32"), _load("whisper_tiny_encoder", "int8")
+    dec = _load("whisper_tiny_decoder", "fp32")
+    START, EOT, MAXT = 50258, 50257, 128
+    same = total = 0
+    g = t.Generator().manual_seed(0)
+    for clip in range(5):
+        # a rough speech-shaped log-mel: formant-like bands plus noise
+        mel = t.randn(1, 80, 3000, generator=g) * 0.5
+        for f in (6, 14, 27):
+            mel[:, f - 2:f + 3, :] += t.sin(t.linspace(0, 60 + 20 * clip, 3000))[None, None] * 2
+        seqs = []
+        for enc in (enc32, enc8):
+            h = enc.execute([mel])[0]
+            ids = t.full((1, MAXT), START, dtype=t.long)
+            out = []
+            for i in range(12):
+                logits = dec.execute([h, ids])[0]
+                nxt = int(logits[0, i].argmax().item())
+                out.append(nxt)
+                if nxt == EOT or i + 1 >= MAXT:
+                    break
+                ids[0, i + 1] = nxt
+            seqs.append(out)
+        total += 1
+        same += int(seqs[0] == seqs[1])
+        print(f"  clip{clip}: fp32 {seqs[0][:6]} | int8 {seqs[1][:6]} | "
+              f"{'same' if seqs[0] == seqs[1] else 'DIFFERS'}", flush=True)
+    return same / total
+
+
 def audit(name):
     cat, size, norm, metric, unit, thr, kw = AUDITS[name]
+    if metric == "whisper":
+        frac = audit_whisper()
+        verdict = "pass" if frac >= thr else "fail"
+        summary = (f"{frac:.0%} of five decoded sequences are identical when the "
+                   f"int8 encoder is swapped in for fp32, decoder held constant")
+        print(f"{name}: {unit} -> {frac:.4f} {verdict} ({summary})", flush=True)
+        p = os.path.join(REPO, "results", f"{name}_int8.json")
+        d = json.load(open(p))
+        d["quality_override"] = {"metric": unit, "median": frac, "worst": frac,
+                                 "headline": frac, "verdict": verdict,
+                                 "why": f"measured end to end — {unit}: {summary}."}
+        json.dump(d, open(p, "w"), indent=2)
+        return
     m32, m8 = _load(name, "fp32"), _load(name, "int8")
     batches = calib_loader(cat, size, norm, n=10, **kw)
     vals, pooled_matched, pooled_total = [], [], []
@@ -133,6 +210,10 @@ def audit(name):
             vals.append(mask_iou(o32[0], o8[0]))
         elif metric == "labels":
             vals.append(label_agreement(o32[0], o8[0]))
+        elif metric == "cosine":
+            vals.append(cosine(o32[0], o8[0]))
+        elif metric == "depth":
+            vals.append(depth_delta1(o32[0], o8[0]))
         elif metric.startswith("detect"):
             fn = detect_agreement_ssdlite if metric == "detect" else detect_agreement_yolox
             m, t = fn(o32, o8)
