@@ -15,15 +15,18 @@ Mac gate (greedy via `native.py`, chat template): correct 2-sentence Rayleigh-sc
 answer, 170.8 tok/s on M-series Mac (reference only). v1 (fp32 embedding) passed 3/3
 (Paris / Japanese / haiku) with identical quant settings otherwise.
 
-iPhone 17 Pro (ETBench, XNNPACK CPU, default threads):
+iPhone 17 Pro / iOS 27 (ETBench, XNNPACK CPU, default threads), re-measured
+2026-08-14 on this 8-bit-embedding build:
 
 | metric | value |
 |--------|-------|
-| load | 1.6 s |
-| ttft (short prompt) | 0.06-0.07 s |
-| decode | **55-81 tok/s** (81 short answer, 55 at 128 tokens) |
+| load | 0.6 s |
+| ttft (short prompt) | 0.05-0.06 s |
+| decode | **65-86 tok/s** (86 short answer, 65 at 128 tokens) |
 
-Outputs correct (Paris; coherent 128-token story).
+Outputs correct (Paris; coherent 128-token story). The earlier 1143 MB
+fp32-embedding build loaded in 1.6 s and decoded 55-81 tok/s, so quantizing the
+embedding table cut both the file and the load time without costing throughput.
 
 **Usage note — chat template is required.** This is an instruct model: raw untemplated
 text makes it emit `<|im_end|>` immediately (looks like broken generation but is not).
