@@ -119,6 +119,35 @@ class Decoder(nn.Module):
         return masks, iou
 
 
+def bake_transformer_pe(transformer, image_pe):
+    """TwoWayTransformer.forward starts with
+    `image_pe.flatten(2).permute(0, 2, 1)`. That input is a constant here, and
+    computing the reshape in-graph on a constant silently corrupts the block that
+    consumes it — the keys coming out of layer 0 land at corr 0.78 against eager,
+    fully portable, with every op verified correct in isolation. Precomputing the
+    same tensor and handing the transformer the already-flat version restores
+    corr 1.000000. Same class as the SAM 2.1 constant-subgraph bake.
+    """
+    flat_pe = image_pe.flatten(2).permute(0, 2, 1).contiguous()
+    orig_forward = transformer.forward
+
+    def forward(image_embedding, image_pe_arg, point_embedding):
+        bs, c, h, w = image_embedding.shape
+        image_embedding = image_embedding.flatten(2).permute(0, 2, 1)
+        queries, keys = point_embedding, image_embedding
+        for layer in transformer.layers:
+            queries, keys = layer(queries=queries, keys=keys,
+                                  query_pe=point_embedding, key_pe=flat_pe)
+        q = queries + point_embedding
+        k = keys + flat_pe
+        attn_out = transformer.final_attn_token_to_image(q=q, k=k, v=keys)
+        queries = transformer.norm_final_attn(queries + attn_out)
+        return queries, keys
+
+    transformer.forward = forward
+    return orig_forward
+
+
 pixel_values = torch.randn(1, 3, 1024, 1024)
 points = torch.tensor([[[512.0, 512.0]]])
 labels = torch.tensor([[1]], dtype=torch.float32)
@@ -128,6 +157,7 @@ with torch.no_grad():
 
 enc = Encoder(sam)
 dec = Decoder(sam, image_pe)
+bake_transformer_pe(sam.mask_decoder.transformer, image_pe)
 
 with torch.no_grad():
     ie = enc(pixel_values)
