@@ -23,7 +23,7 @@ only, not a device number (torch eager fp32 on the same machine: 345.4 ms).
 Correlation is a first filter. These are the numbers that decide:
 
 - **fp16** — correlation reads 0.43 on this build, and that number is an artifact: one of the four outputs is a near-binary validity mask whose raw logits correlate badly while the thresholded mask is identical. Measured properly against fp32 — mask IoU 1.0000, point map cosine 1.000000, normals cosine 1.000000, metric scale within 0.6% — the geometry is unchanged.
-- **int8 (dynamic)** — point map and normals hold at cosine 0.999 against the fp32 build.
+- **int8 (dynamic)** — measured in the units that matter for this model — cosine similarity of the point map and normals: median 1.0000 over 10 real images, worst 1.0000.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 

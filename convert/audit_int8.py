@@ -69,6 +69,10 @@ AUDITS = {
     "pidnet_s_cityscapes": ("street", 1024, "imagenet", "labels",
                             "fraction of pixels keeping their class", 0.95, {}),
     "edsr_base_x4": ("general", 128, "01", "psnr", "PSNR vs the fp32 .pte (dB)", 30.0, {}),
+    # 30 dB is where a restoration result stops being visibly different; LaMa's
+    # int8 build sits at 22 and is not published because of it.
+    "lama_512": ("general", 512, "01", "psnr_masked", "PSNR vs the fp32 .pte (dB)",
+                 30.0, {}),
     # Embedding models are consumed through cosine similarity; depth through ratio.
     "dinov2_vits14": ("general", 518, "imagenet", "cosine",
                       "cosine similarity of the embeddings", 0.99, {}),
@@ -80,6 +84,11 @@ AUDITS = {
                           "cosine similarity of the image embeddings", 0.99, {}),
     "whisper_tiny_encoder": (None, None, None, "whisper",
                              "decoded token sequences that match fp32", 0.99, {}),
+    # MoGe returns four tensors; judge it on the geometry, which is what it is for.
+    # Its worst-output correlation is dominated by a near-binary validity mask and
+    # says nothing useful.
+    "moge2_vits": ("general", 518, "imagenet", "geometry",
+                   "cosine similarity of the point map and normals", 0.99, {}),
     # Detection audits need imagery that actually contains detections; the street
     # set carries 653 firings above 0.3 in YOLOX fp32, the general set almost none.
     "ssdlite320_mobilenetv3": ("street", 320, "01", "detect",
@@ -198,6 +207,11 @@ def audit(name):
         return
     m32, m8 = _load(name, "fp32"), _load(name, "int8")
     batches = calib_loader(cat, size, norm, n=10, **kw)
+    if metric == "psnr_masked":
+        # LaMa takes (image, mask); hole in the upper-left quadrant.
+        mask = torch.zeros(1, 1, size, size)
+        mask[:, :, size // 4:size // 2, size // 4:size // 2] = 1.0
+        batches = [(b[0], mask) for b in batches[:5]]
     vals, pooled_matched, pooled_total = [], [], []
     for b in batches:
         o32 = m32.execute(list(b))
@@ -206,12 +220,16 @@ def audit(name):
         o8 = o8 if isinstance(o8, (list, tuple)) else [o8]
         if metric == "psnr":
             vals.append(psnr(o32[0], o8[0]))
+        elif metric == "psnr_masked":
+            vals.append(psnr(o32[0], o8[0]))
         elif metric == "iou":
             vals.append(mask_iou(o32[0], o8[0]))
         elif metric == "labels":
             vals.append(label_agreement(o32[0], o8[0]))
         elif metric == "cosine":
             vals.append(cosine(o32[0], o8[0]))
+        elif metric == "geometry":
+            vals.append(min(cosine(o32[0], o8[0]), cosine(o32[1], o8[1])))
         elif metric == "depth":
             vals.append(depth_delta1(o32[0], o8[0]))
         elif metric.startswith("detect"):

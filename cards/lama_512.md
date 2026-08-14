@@ -18,7 +18,7 @@ only, not a device number (torch eager fp32 on the same machine: 638.2 ms).
 
 ### Precisions that did not earn a slot
 
-- **int8 is not shipped**: correlation 0.958 clears the 0.95 bar, but for an image-to-image model that bar is the wrong one: 22 dB is visible degradation, where 30 dB reads as near-identical. Not shipped.
+- **int8 is not shipped**: measured in the units that matter for this model — PSNR vs the fp32 .pte (dB): median 22.4666 over 5 real images, worst 21.3621.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
