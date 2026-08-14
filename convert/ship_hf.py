@@ -58,6 +58,12 @@ SHIP = [
      "cards/edgetam.md", ["mask-generation"], "facebook/EdgeTAM"),
     ("MobileSAM-ExecuTorch", "apache-2.0", ["mobilesam_encoder", "mobilesam_decoder"],
      "cards/mobilesam.md", ["mask-generation"], None),
+    ("U2Net-ExecuTorch", "apache-2.0", ["u2net"],
+     "cards/u2net.md", ["image-segmentation"], None),
+    ("DIS-ISNet-ExecuTorch", "apache-2.0", ["dis_isnet"],
+     "cards/dis_isnet.md", ["image-segmentation"], None),
+    ("Real-ESRGAN-x4v3-ExecuTorch", "bsd-3-clause", ["real_esrgan_x4v3"],
+     "cards/real_esrgan_x4v3.md", ["image-to-image", "super-resolution"], None),
 ]
 
 
