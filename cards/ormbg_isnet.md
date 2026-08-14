@@ -17,6 +17,12 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 375.5 ms).
 
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8** — measured in the units that matter for this model: mask IoU at 0.5, median 0.9994 over five real images (worst 0.9916) against the fp32 build.
+
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: it comes out at 100% of the fp32 file (176.1 MB vs 176.1 MB), so it buys nothing. XNNPACK serializes convolution weights as fp32 no matter what dtype the graph carries, so on a conv-heavy model fp16 saves no disk and only adds cast operations. Reach for int8 here, not fp16.

@@ -29,7 +29,11 @@ class Decoded(torch.nn.Module):
 x = torch.randn(1, 3, 640, 640)
 from calib import calib_loader
 
-batches = calib_loader("general", 640, "255", bgr=True)
+# Calibrate on street scenes, not landscapes: the "general" set is mostly scenery
+# with no COCO objects in it, and quantizing a detector against activations it will
+# never see at inference moved boxes by up to 12 px. This set carries 653 detections
+# above 0.3 in the fp32 build.
+batches = calib_loader("street", 640, "255", bgr=True)
 cal = lambda mod: [mod(*b) for b in batches]
 for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
     convert_and_gate(

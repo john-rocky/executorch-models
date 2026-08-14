@@ -32,7 +32,8 @@ m = ssdlite320_mobilenet_v3_large(weights=SSDLite320_MobileNet_V3_Large_Weights.
 x = torch.randn(1, 3, 320, 320)
 from calib import calib_loader
 
-batches = calib_loader("general", 320, "01")
+# Street scenes, not landscapes — see the note in export_yolox.py.
+batches = calib_loader("street", 320, "01")
 cal = lambda mod: [mod(*b) for b in batches]
 for prec in (sys.argv[1:] or ["fp32", "fp16", "int8"]):
     convert_and_gate(

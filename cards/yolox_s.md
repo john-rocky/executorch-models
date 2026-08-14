@@ -12,10 +12,16 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 | precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `yolox_s_xnnpack_fp32.pte` | 35.9 | 1.000000 | 25.0 |
-| int8 | `yolox_s_xnnpack_int8.pte` | 9.2 | 0.998843 | 33.2 |
+| int8 | `yolox_s_xnnpack_int8.pte` | 9.2 | 0.999800 | 77.3 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 38.6 ms).
+
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8** — measured in the units that matter for this model — fraction of post-NMS detections matched at IoU 0.5 and same class: 0.938 of the fp32 build's detections are matched (90 of 96 across 10 images), worst single image 0.571.
 
 ### Precisions that did not earn a slot
 

@@ -28,8 +28,8 @@ measured on a real image.
 | [SAM2.1-hiera-tiny](https://huggingface.co/mlboydaisuke/SAM2.1-hiera-tiny-ExecuTorch) | promptable segmentation | 109 enc + 25 dec (E2E mask IoU 1.0000) | 55.6 enc + 12.6 dec | — | Apache-2.0 |
 | [RT-DETRv2-S](https://huggingface.co/mlboydaisuke/RT-DETRv2-S-ExecuTorch) | object detection (no NMS) | 81 | — | — | Apache-2.0 |
 | [D-FINE-S](https://huggingface.co/mlboydaisuke/D-FINE-S-ExecuTorch) | object detection (no NMS) | 42 | — | — | Apache-2.0 |
-| [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9988) | Apache-2.0 |
-| [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9636) | BSD-3 |
+| [YOLOX-s](https://huggingface.co/mlboydaisuke/YOLOX-s-ExecuTorch) | object detection | 36 | — | **9.2** (0.9998) | Apache-2.0 |
+| [SSDLite320-MobileNetV3](https://huggingface.co/mlboydaisuke/SSDLite320-MobileNetV3-ExecuTorch) | object detection (raw head) | 14 | — | **3.9** (0.9688) | BSD-3 |
 | [Depth-Anything-V2-Small](https://huggingface.co/mlboydaisuke/Depth-Anything-V2-Small-ExecuTorch) | monocular depth | 99 | 55.5 (1.0000) | **35.5** (1.0000) | Apache-2.0 |
 | [DINOv2 ViT-S/14](https://huggingface.co/mlboydaisuke/DINOv2-ViT-S14-ExecuTorch) | feature extraction | 88 | 44.8 (0.9999) | **24.9** (0.9980) | Apache-2.0 |
 | [CLIP ViT-B/32](https://huggingface.co/mlboydaisuke/CLIP-ViT-B32-ExecuTorch) | zero-shot classification | 352 img + 254 txt | 181 + 127 (1.0000) | **95.9** img (0.9957) | MIT |
@@ -114,6 +114,8 @@ Depth-Anything-V2 to 0.493. Quantizing only `linear` dynamically brings the same
 models back to 0.998, 0.996 and 0.99998. Note that a *global* dynamic config also
 annotates convolutions, which XNNPACK cannot lower (`ChannelsLastTaggedReshapePass:
 required rank 4 tensor`), so scope it with `set_operator_type`.
+
+**Calibrate on imagery the model will actually meet.** Both detectors here were first quantized against landscape photos containing almost no COCO objects, which moved YOLOX's boxes by up to 12 px. Re-calibrating on street scenes — 653 firing detections instead of nearly none — took its correlation from 0.9988 to 0.9998 and its post-NMS agreement with fp32 to 94%.
 
 **Calibrate and measure on real images.** A calibrated int8 model clips activations
 it never saw, so parity measured on `torch.randn` reads far worse than the model

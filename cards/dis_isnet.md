@@ -17,6 +17,12 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 392.2 ms).
 
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8** — mask IoU 0.963 median against fp32 (worst 0.927 of five images). The disagreement is boundary pixels, which is what int8 costs on a cutout model.
+
 ### Precisions that did not earn a slot
 
 - **fp16 is not shipped**: worst-output corr 0.986 against fp32 eager, below the 0.995 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.

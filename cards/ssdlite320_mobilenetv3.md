@@ -12,10 +12,16 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 | precision | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
 | fp32 | `ssdlite320_mobilenetv3_xnnpack_fp32.pte` | 13.8 | 1.000000 | 5.1 |
-| int8 | `ssdlite320_mobilenetv3_xnnpack_int8.pte` | 3.9 | 0.963558 | 4.9 |
+| int8 | `ssdlite320_mobilenetv3_xnnpack_int8.pte` | 3.9 | 0.968820 | 7.1 |
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 115.3 ms).
+
+### Checked in the task's own units
+
+Correlation is a first filter. These are the numbers that decide:
+
+- **int8** — measured in the units that matter for this model — fraction of firing detections agreeing: 0.999 of the fp32 build's detections are matched (26988 of 27004 across 10 images), worst single image 0.998.
 
 ### Precisions that did not earn a slot
 

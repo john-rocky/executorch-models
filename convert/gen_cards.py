@@ -67,7 +67,7 @@ def main():
     for name in model_names():
         variants = load_variants(name)
         r = variants["fp32"]
-        vrows, failed_lines = [], []
+        vrows, failed_lines, audited = [], [], []
         for prec in PRECISIONS:
             v = variants.get(prec)
             if not v:
@@ -75,6 +75,9 @@ def main():
             if v["ships"]:
                 vrows.append(f"| {label(prec, v)} | `{v['pte']}` | {v['size_mb']} | "
                              f"{v['worst_corr']:.6f} | {v['et_ms_median']} |")
+                ov = v.get("quality_override")
+                if ov and ov.get("verdict") == "pass":
+                    audited.append(f"- **{label(prec, v)}** — {ov['why']}")
             else:
                 dom = v.get("dominated_by")
                 failed_lines.append(SKIP_TEXT[v["skip_reason"]].format(
@@ -84,9 +87,13 @@ def main():
                     dom=label(dom, variants[dom]) if dom else "smaller",
                     why=(v.get("quality_override") or {}).get("why", "")))
         failed = ""
+        if audited:
+            failed += ("\n### Checked in the task's own units\n\n"
+                       "Correlation is a first filter. These are the numbers that decide:\n\n"
+                       + "\n".join(audited) + "\n")
         if failed_lines:
-            failed = "\n### Precisions that did not earn a slot\n\n" + \
-                     "\n".join(failed_lines) + "\n"
+            failed += ("\n### Precisions that did not earn a slot\n\n"
+                       + "\n".join(failed_lines) + "\n")
         prows = "\n".join(
             f"| {p['output']} | {p['shape']} | {p['max_abs_diff']:.3e} | {p['corr']:.6f} |"
             for p in r["parity"])
