@@ -36,3 +36,5 @@ XNNPACK delegate coverage (fp32): 79.7% (177/222 ops); ops left on the portable 
 
 torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
+
+**Notes**: int8 does not run on executorch 1.4.0, and the reason is a collision between two workarounds rather than anything about this model. PReLU segfaults on the XNNPACK delegate (upstream #17559, fix #21480 not in the stable wheel), so it has to be excluded from partitioning — and a quantized graph with a portable PReLU between delegated convolutions fails shape propagation at execute. Three conv+PReLU layers reproduce it; the same graph in fp32 is corr 1.000000. Reported at https://github.com/pytorch/executorch/pull/21480

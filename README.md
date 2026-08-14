@@ -196,6 +196,14 @@ value ever enters the graph.
 - **Graph asserts**: RT-DETRv2 / D-FINE carry `_is_all_true` runtime asserts that
   the Edge verifier rejects — `harness.py convert_and_gate(..., strip_asserts=True)`
   erases them before lowering.
+- **A PReLU model cannot be quantized on 1.4.0** — the two workarounds collide.
+  Keeping PReLU on the delegate segfaults (below); excluding it from partitioning
+  is fine in fp32 and fails at execute once quantized
+  (`Propagating input shapes failed`), because the graph then has portable PReLU
+  between delegated quantized convolutions. Three conv+PReLU layers reproduce it.
+  Reported on [#21480](https://github.com/pytorch/executorch/pull/21480); landing
+  that fix removes the need for the exclusion and closes both paths. This is why
+  Real-ESRGAN and TwinLiteNet ship fp32-only.
 - **XNNPACK PReLU segfault (executorch 1.4.0)**: PReLU constant data is not packed
   → use-after-free ([#17559](https://github.com/pytorch/executorch/issues/17559),
   fixed in [#21480](https://github.com/pytorch/executorch/pull/21480), not in 1.4.0).
