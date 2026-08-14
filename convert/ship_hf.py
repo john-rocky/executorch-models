@@ -69,6 +69,8 @@ SHIP = [
     ("Whisper-tiny-ExecuTorch", "apache-2.0",
      ["whisper_tiny_encoder", "whisper_tiny_decoder"],
      "cards/whisper_tiny.md", ["automatic-speech-recognition"], "openai/whisper-tiny"),
+    ("LaMa-Inpainting-ExecuTorch", "apache-2.0", ["lama_512"],
+     "cards/lama_512.md", ["image-to-image", "inpainting"], None),
 ]
 
 

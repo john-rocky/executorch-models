@@ -41,6 +41,7 @@ measured on a real image.
 | [TwinLiteNet](https://huggingface.co/mlboydaisuke/TwinLiteNet-ExecuTorch) | drivable area + lanes | 1.8 | — | — | MIT |
 | [EDSR ×4](https://huggingface.co/mlboydaisuke/EDSR-x4-ExecuTorch) | super-resolution | 6.1 | — | **1.6** (0.9999) | Apache-2.0 |
 | [Real-ESRGAN x4v3](https://huggingface.co/mlboydaisuke/Real-ESRGAN-x4v3-ExecuTorch) | super-resolution | **4.9** | — | — | BSD-3 |
+| [LaMa](https://huggingface.co/mlboydaisuke/LaMa-Inpainting-ExecuTorch) | inpainting (512x512) | 205 | — | — | Apache-2.0 |
 | [EfficientNet-B1](https://huggingface.co/mlboydaisuke/EfficientNet-B1-ExecuTorch) | classification | 31 | 28.8 (0.9998) | — | BSD-3 |
 | [6DRepNet](https://huggingface.co/mlboydaisuke/6DRepNet-HeadPose-ExecuTorch) | head pose (6D rotation) | 157 | — | — | MIT |
 
@@ -137,7 +138,7 @@ inverse is a fixed linear map, so `IRFFT2` precomputes it as two real matmuls �
 exportable, delegatable, and 3.1 MB of matrices at 512x512. Verified against
 `torch.fft.irfftn` to ~1e-6, and a full Fast Fourier Convolution block round-trips
 at corr 1.000000 on both the portable kernels and XNNPACK. This is what unblocks
-the LaMa family. Keep real and imaginary parts as separate tensors so no complex
+the LaMa family — big-lama itself converts through it at corr 1.000000. Keep real and imaginary parts as separate tensors so no complex
 value ever enters the graph.
 
 ### Hard-won notes (traps)
