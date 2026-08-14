@@ -42,8 +42,15 @@ Two things this does *not* mean. It does not mean XNNPACK was a mistake: the sam
 `.pte` runs on Android, and Core ML files do not. And it does not mean the
 ExecuTorch layer is dead weight on Apple hardware — the same graph converted
 straight through coremltools to a `.mlpackage` runs 47.9 ms against ExecuTorch's
-48.0 ms, so wrapping it costs **0.3%**. One export, both platforms, both
-accelerated.
+48.0 ms, so wrapping it costs **0.3%**.
+
+It also does not transfer to Android. Lowering the same models to the Vulkan
+backend and running them on a Pixel 8a gives a median of 1.7x, not 12x — 3.5x on
+ormbg at 1024², and a 0.65x *regression* on MODNet at 512². The win tracks input
+size, so Vulkan is a per-model decision rather than a default, and it saves no
+space: Vulkan keeps fp32 weights where Core ML halves them. Android ships XNNPACK.
+Qualcomm's QNN is untested here — a Pixel is Tensor, so it needs a Snapdragon
+device.
 
 Core ML builds convert with `CONVERT_BACKEND=coreml` and no change to any export
 script. 26 of the shelf's 29 models lower cleanly; RT-DETRv2 and D-FINE hit a
