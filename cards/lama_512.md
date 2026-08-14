@@ -16,6 +16,10 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
 only, not a device number (torch eager fp32 on the same machine: 638.2 ms).
 
+### Precisions that did not earn a slot
+
+- **int8 is not shipped**: correlation 0.958 clears the 0.95 bar, but for an image-to-image model that bar is the wrong one: 22 dB is visible degradation, where 30 dB reads as near-identical. Not shipped.
+
 ## Verification (executorch 1.4.0, torch 2.13.0)
 
 Parity is measured against the fp32 eager model on real image input; `corr` is
@@ -33,3 +37,5 @@ torch.export -> to_edge_transform_and_lower(XnnpackPartitioner) -> .pte
 (conversion scripts: [executorch-models](https://github.com/john-rocky/executorch-models))
 
 **Notes**: The inverse FFT inside every FourierUnit is replaced with the real matmul form from convert/fft_ops.py; ExecuTorch cannot lower torch.fft.irfftn. Spatial size is fixed because those matrices are built per size.
+
+**Notes (int8)**: The inverse FFT inside every FourierUnit is replaced with the real matmul form from convert/fft_ops.py; ExecuTorch cannot lower torch.fft.irfftn. Spatial size is fixed because those matrices are built per size.

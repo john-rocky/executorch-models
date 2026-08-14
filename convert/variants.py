@@ -48,7 +48,17 @@ def load_variants(name):
             (p for p in PRECISIONS[:i]
              if p in out and out[p]["ships"]
              and r["size_mb"] > SIZE_RATIO_MAX * out[p]["size_mb"]), None)
-        if not r["gate_pass"]:
+        # A `quality_override` in the result is a measurement in the task's own
+        # units, and it wins. Correlation is a blunt instrument: it cleared
+        # LaMa's int8 at 0.958 when the same file is 22 dB PSNR against fp32,
+        # which is visible degradation, and it flagged 6DRepNet's int8 at 0.815
+        # when the real number was 46 degrees of rotation error. Whenever the
+        # output is an image or a small vector, measure the thing that matters
+        # and record it here.
+        override = r.get("quality_override")
+        if override and override.get("verdict") == "fail":
+            r["ships"], r["skip_reason"] = False, "task_metric"
+        elif not r["gate_pass"]:
             r["ships"], r["skip_reason"] = False, "quality"
         elif prec == "fp32":
             r["ships"], r["skip_reason"] = True, None

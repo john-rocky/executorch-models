@@ -119,7 +119,7 @@ with no ExecuTorch involved — some architectures simply are not half-precision
 and no amount of export-side work recovers that. Dynamic int8 was the answer for
 that encoder instead (28.3 → 14.0 MB at corr 0.9999).
 
-**Judge quality with the task's own metric when the output is small.** Correlation works on a 260k-element mask and says very little about a six-element regression. 6DRepNet's int8 build reads corr 0.815, which looks borderline; converting both outputs to rotation matrices puts it at a median 46° apart from fp32. Re-parameterized RepVGG backbones are a known post-training-quantization failure — the fused branches leave weight ranges too wide for an int8 grid.
+**Correlation is a first filter, not the verdict — finish with the task's own metric.** It misses in both directions. LaMa's int8 build clears the 0.95 bar at 0.958 and is 22 dB PSNR against fp32, which is visible degradation, so it is not published. EDSR's int8 reads 0.9999 and measures 47 dB, which really is invisible. 6DRepNet's reads 0.815 and works out to 46° of rotation error — a genuine failure, and the known one for re-parameterized RepVGG, whose fused branches leave weight ranges too wide for an int8 grid. Use PSNR for image-to-image, IoU for masks, degrees for pose, box/score agreement for detection.
 
 **Some models just do not quantize.** EfficientNet-B1 lands at corr 0.077 whether
 weights are per-channel or per-tensor, and whether the whole graph or only
