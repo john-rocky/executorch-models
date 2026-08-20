@@ -16,6 +16,9 @@ is a file swap. Where a precision did not make it, the card says so and why.
 
 ## Models
 
+All of them are on Hugging Face, one repository each, with the card that qualified the
+build: **[ExecuTorch Model Zoo](https://huggingface.co/collections/mlboydaisuke/executorch-model-zoo-6a7ff328390b63075ffeae5e)**.
+
 ## The biggest lever is the backend, not the precision
 
 Everything here shipped as XNNPACK first, and XNNPACK is CPU-only. ExecuTorch also
@@ -151,6 +154,76 @@ All numbers are single-runtime ExecuTorch XNNPACK (CPU) measurements; details an
 conditions are on each model card. LLM exports use `export_llm` configs in
 [`llm_params/`](llm_params/) — instruct models **require the chat template**
 (raw prompts return EOS immediately; see cards).
+
+## Running one yourself
+
+```bash
+python -m venv .venv && source .venv/bin/activate
+pip install executorch==1.4.0 torch==2.13 coremltools==9.0
+python convert/export_yolox.py
+```
+
+That writes `pte/yolox_s_xnnpack_fp32.pte` and, on macOS, `pte/yolox_s_coreml_all.pte`
+beside it, plus `results/yolox_s.json` with the parity numbers the card is rendered from.
+Weights are pulled from their upstream source on first run.
+
+Ten of the scripts import model code from a repository that is not on PyPI, and need to be
+told where those checkouts are. Without `CONVERT_REPOS` they fail on the import line
+(`ModuleNotFoundError: No module named 'src'` and its neighbours), which looks like a
+broken script and is not one:
+
+```bash
+mkdir -p ~/third_party && cd ~/third_party
+for r in thohemp/6DRepNet xuebinqin/DIS advimman/lama ZHKKKe/MODNet \
+         ChaoningZhang/MobileSAM microsoft/MoGe XuJiacong/PIDNet \
+         open-mmlab/mmpose chequanghuy/TwinLiteNet xuebinqin/U-2-Net; do
+  git clone --depth 1 "https://github.com/$r"
+done
+export CONVERT_REPOS=~/third_party
+```
+
+| script | needs the checkout |
+|---|---|
+| `export_6drepnet.py` | `6DRepNet` |
+| `export_dis.py` | `DIS` |
+| `export_lama.py` | `lama` |
+| `export_mobilesam.py` | `MobileSAM` |
+| `export_modnet.py` | `MODNet` |
+| `export_moge2.py` | `MoGe` |
+| `export_pidnet.py` | `PIDNet` |
+| `export_rtmpose.py` | `mmpose` |
+| `export_twinlite.py` | `TwinLiteNet` |
+| `export_u2net.py` | `U-2-Net` |
+
+The other twenty-eight need nothing but the pip install.
+
+### Choosing what gets built
+
+A plain run emits the XNNPACK fp32 build and, on macOS, the Core ML one. Three variables
+narrow or redirect that:
+
+| variable | default | what it does |
+|---|---|---|
+| `CONVERT_BACKEND` | both | `xnnpack`, `coreml` or `vulkan` — pins one, and setting it at all stops the automatic Core ML build |
+| `CONVERT_COREML_PRECISION` | `fp16` | `fp32` keeps the graph off the fp16 path, for decoders that iterate and lose too much in half |
+| `CONVERT_COREML_UNIT` | `all` | which compute units Core ML may use |
+
+So the Core ML fp32 build of a model whose decoder will not survive fp16 is:
+
+```bash
+CONVERT_BACKEND=coreml CONVERT_COREML_PRECISION=fp32 python convert/export_rtdetrv2.py
+```
+
+### Checking the numbers rather than taking them
+
+The two device sweeps behind the speedup table are in [`results/`](results/), as recorded.
+`convert/chart_delegate.py` reads them and draws the comparison, so the picture cannot
+drift from the measurement:
+
+```bash
+pip install matplotlib
+python convert/chart_delegate.py     # writes findings/coreml_vs_xnnpack.png
+```
 
 ## Conversion recipe
 

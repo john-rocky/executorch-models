@@ -19,6 +19,7 @@ only, not a device number (torch eager fp32 on the same machine: 64.9 ms).
 ### Builds that did not earn a slot
 
 - **fp16 is not shipped**: worst-output corr 0.329 against fp32 eager, below the 0.995 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.
+- **Core ML (fp16, iOS) is not shipped**: worst-output corr 0.217 against fp32 eager, below the 0.995 bar for this precision. The file converts and runs; the numbers do not hold up, so it is left out rather than shipped with a warning.
 
 ## Verification (executorch 1.4.0, torch 2.13.0)
 

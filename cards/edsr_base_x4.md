@@ -3,7 +3,7 @@
 - **Source**: eugenesiow/edsr-base (super-image)
 - **License**: Apache-2.0
 - **Input**: [[1, 3, 128, 128]] — RGB 0-1, 128x128 tile
-- **Output**: SR image [1,3,512,512] RGB, nominally 0-1 but not clamped by the model — it overshoots on high-contrast edges (measured: 0.7% of pixels outside 0-1, range -0.02 to 1.06 over ten tiles). Clamp before display.
+- **Output**: SR image [1,3,512,512] RGB, nominally 0-1 but not clamped by the model — it overshoots on high-contrast edges. Clamp before display.
 
 ## Variants
 
@@ -11,9 +11,9 @@ All variants take and return fp32 tensors — swap the `.pte` file, keep your ap
 
 | build | file | size (MB) | parity vs fp32 eager (worst corr) | Mac median (ms)* |
 |-----------|------|-----------|------------------------------------|------------------|
-| fp32 | `edsr_base_x4_xnnpack_fp32.pte` | 6.1 | 1.000000 | 38.9 |
+| fp32 | `edsr_base_x4_xnnpack_fp32.pte` | 6.1 | 1.000000 | 42.5 |
 | int8 | `edsr_base_x4_xnnpack_int8.pte` | 1.6 | 0.999918 | 28.3 |
-| Core ML (fp16, iOS) | `edsr_base_x4_coreml_all.pte` | 3.3 | 0.999999 | 8.4 |
+| Core ML (fp16, iOS) | `edsr_base_x4_coreml_all.pte` | 3.3 | 0.999999 | 7.6 |
 
 
 The Core ML build is the same graph lowered to Apple's Neural Engine instead of
@@ -24,7 +24,7 @@ against 5.9 ms. It computes in fp16 and is iOS-only; the XNNPACK files stay the
 portable option and are what runs on Android.
 
 \*Mac arm64, single process, median of 10 — a reference point for relative cost
-only, not a device number (torch eager fp32 on the same machine: 77.9 ms).
+only, not a device number (torch eager fp32 on the same machine: 78.5 ms).
 
 ### Checked in the task's own units
 

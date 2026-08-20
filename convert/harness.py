@@ -17,6 +17,7 @@ import json
 import operator
 import os
 import statistics
+import sys
 import time
 from collections import Counter
 
@@ -29,12 +30,91 @@ RESULTS_DIR = os.path.join(REPO, "results")
 # Print a WARN when worst-output corr vs fp32 eager drops below these.
 CORR_GATE = {"fp32": 0.999, "fp16": 0.995, "int8": 0.95}
 
-# CONVERT_BACKEND=coreml re-targets every export script without editing any of
-# them. XNNPACK is CPU-only; Core ML can place the graph on the Neural Engine and
-# measured 11.7x faster on Depth-Anything-V2 (see KNOWLEDGE). Core ML computes in
-# fp16, so its correlation gate is the fp16 one, not fp32's.
+# Every model ships on both backends. XNNPACK is CPU-only and portable (the same
+# file runs on Android); Core ML reaches the Neural Engine and measured 3.5-13.9x
+# faster on device (median 12x, see KNOWLEDGE). A convert_and_gate call for fp32
+# therefore emits both files unless CONVERT_BACKEND narrows it to one, which is
+# what the A/B scripts do. Core ML computes in fp16, so it answers to the fp16
+# correlation gate rather than fp32's.
 BACKEND = os.environ.get("CONVERT_BACKEND", "xnnpack")
+ALSO_COREML = os.environ.get("CONVERT_BACKEND") is None and sys.platform == "darwin"
 COREML_UNIT = os.environ.get("CONVERT_COREML_UNIT", "all")
+# fp16 is what reaches the Neural Engine, so it is the default. Models whose
+# decoders iterate (RT-DETRv2, D-FINE) lose too much in fp16 — their XNNPACK fp16
+# builds were already withdrawn for it — and can be built fp32 instead, which
+# stays on GPU/CPU but may still beat XNNPACK.
+COREML_PRECISION = os.environ.get("CONVERT_COREML_PRECISION", "fp16")
+
+
+# Ops coremltools will only accept in floating point. A constant that began life
+# as a Python int stays integer through torch.export, and these are where it
+# stops being harmless.
+_FLOAT_ONLY_OPS = (
+    torch.ops.aten.sqrt.default, torch.ops.aten.rsqrt.default,
+    torch.ops.aten.exp.default, torch.ops.aten.log.default,
+    torch.ops.aten.sin.default, torch.ops.aten.cos.default,
+    torch.ops.aten.reciprocal.default, torch.ops.aten.sigmoid.default,
+    torch.ops.aten.tanh.default,
+)
+
+
+def _fix_dtypes_for_coreml(ep):
+    """Two dtype rules Core ML has and PyTorch does not, both from Python ints.
+
+    float64 is not narrowed by coremltools so much as mistyped: the operand comes
+    out the other side as an int, and the failure surfaces far away as
+    `matmul ... got x as int32 and y as fp32`. RT-DETRv2 and D-FINE hit that
+    through `torch.outer` in their anchor tables.
+
+    Integer input to a float-only op is the other half — RAFT-small computes a
+    normalisation constant from a Python int and feeds it to `sqrt`, which Core ML
+    refuses outright.
+
+    Cast at the operand rather than the producer: the same value may be consumed
+    elsewhere by an op that is happy with it. Uses `_to_copy` because the EXIR
+    frontend does not accept `to.dtype`.
+    """
+    gm = ep.graph_module
+    cast = 0
+    for node in list(gm.graph.nodes):
+        if node.op != "call_function":
+            continue
+        float_only = node.target in _FLOAT_ONLY_OPS
+        args = []
+        for a in node.args:
+            v = getattr(a, "meta", {}).get("val", None) if hasattr(a, "meta") else None
+            dt = getattr(v, "dtype", None)
+            bad = dt == torch.float64 or (
+                float_only and dt is not None and not dt.is_floating_point)
+            if bad:
+                with gm.graph.inserting_before(node):
+                    a = gm.graph.call_function(torch.ops.aten._to_copy.default,
+                                               (a,), {"dtype": torch.float32})
+                cast += 1
+            args.append(a)
+        node.args = tuple(args)
+    if cast:
+        # torch.export also records `_assert_tensor_metadata` nodes stating the
+        # dtype it saw. Retyping an operand makes those assertions false, and the
+        # graph fails to re-trace with "Tensor dtype mismatch! Expected float64".
+        # They carry no output, so erasing them is safe.
+        for node in reversed(list(gm.graph.nodes)):
+            if (node.op == "call_function"
+                    and node.target is torch.ops.aten._assert_tensor_metadata.default):
+                gm.graph.erase_node(node)
+        gm.graph.eliminate_dead_code()
+        gm.graph.lint()
+        gm.recompile()
+        print(f"  cast {cast} operand(s) to float32 for Core ML")
+    return ep
+
+
+def _vulkan_partitioner():
+    """Android's GPU path. Unlike Core ML there is no host runtime to check
+    against — a Vulkan .pte cannot execute on the Mac — so its parity is measured
+    on the device instead and the host result records that."""
+    from executorch.backends.vulkan.partitioner.vulkan_partitioner import VulkanPartitioner
+    return VulkanPartitioner()
 
 
 def _coreml_partitioner():
@@ -48,7 +128,8 @@ def _coreml_partitioner():
              "gpu": ct.ComputeUnit.CPU_AND_GPU,
              "cpu": ct.ComputeUnit.CPU_ONLY}
     specs = CoreMLBackend.generate_compile_specs(
-        compute_precision=ct.precision.FLOAT16,
+        compute_precision=(ct.precision.FLOAT32 if COREML_PRECISION == "fp32"
+                           else ct.precision.FLOAT16),
         compute_unit=units[COREML_UNIT],
         minimum_deployment_target=ct.target.iOS17,
     )
@@ -263,7 +344,7 @@ def _delegation_report(gm):
     }
 
 
-def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, partitioner=None,
+def _convert_one(name, model, example_inputs, runs=10, extra_meta=None, partitioner=None,
                      skip_dim_order=False, strip_asserts=False,
                      precision="fp32", calibrate=None, gate_inputs=None,
                      exclude_configs=None, int8_dynamic=False, int8_per_channel=True,
@@ -303,6 +384,8 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     ep = torch.export.export(export_model, tuple(example_inputs))
     if strip_asserts:
         ep = _strip_asserts(ep)
+    if BACKEND == "coreml":
+        ep = _fix_dtypes_for_coreml(ep)
 
     from executorch.backends.xnnpack.partition.xnnpack_partitioner import XnnpackPartitioner
     from executorch.exir import to_edge_transform_and_lower
@@ -311,6 +394,8 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     if partitioner is None:
         if BACKEND == "coreml":
             partitioner = _coreml_partitioner()
+        elif BACKEND == "vulkan":
+            partitioner = _vulkan_partitioner()
         elif exclude_configs:
             from executorch.backends.xnnpack.partition.config import ALL_PARTITIONER_CONFIGS
             cfgs = [c for c in ALL_PARTITIONER_CONFIGS if c.__name__ not in exclude_configs]
@@ -328,32 +413,46 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     edge = to_edge_transform_and_lower(ep, partitioner=parts, **kwargs)
     delegation = _delegation_report(edge.exported_program().graph_module)
     et = edge.to_executorch()
-    suffix = f"coreml_{COREML_UNIT}" if BACKEND == "coreml" else f"xnnpack_{precision}"
+    if BACKEND == "coreml":
+        suffix = f"coreml_{COREML_UNIT}" + ("_fp32" if COREML_PRECISION == "fp32" else "")
+    elif BACKEND == "vulkan":
+        suffix = "vulkan"
+    else:
+        suffix = f"xnnpack_{precision}"
     pte_path = os.path.join(PTE_DIR, f"{name}_{suffix}.pte")
     with open(pte_path, "wb") as f:
         f.write(et.buffer)
     size_mb = os.path.getsize(pte_path) / 1e6
 
-    from executorch.runtime import Runtime
+    if BACKEND == "vulkan":
+        # There is no Vulkan driver on the host, so nothing here can execute the
+        # file. The delegation report is still meaningful; parity and timing come
+        # from the device runner, and the result says so rather than reporting a
+        # correlation of 1.0 that was never measured.
+        parity = [{"output": i, "shape": list(r.shape), "max_abs_diff": None,
+                   "corr": None, "rel_l2": None} for i, r in enumerate(ref)]
+        et_ms = torch_ms = 0.0
+    else:
+        from executorch.runtime import Runtime
 
-    rt = Runtime.get()
-    prog = rt.load_program(pte_path)
-    method = prog.load_method("forward")
-    out = _flatten_outputs(method.execute(list(gate_inputs)))
+        rt = Runtime.get()
+        prog = rt.load_program(pte_path)
+        method = prog.load_method("forward")
+        out = _flatten_outputs(method.execute(list(gate_inputs)))
 
-    assert len(out) == len(ref), f"output arity mismatch: et={len(out)} torch={len(ref)}"
-    parity = []
-    for i, (o, r) in enumerate(zip(out, ref)):
-        o, r = o.float(), r.float()
-        diff = (o - r).abs().max().item()
-        corr = torch.corrcoef(torch.stack([o.flatten(), r.flatten()]))[0, 1].item()
-        rel = ((o - r).norm() / r.norm().clamp_min(1e-12)).item()
-        parity.append({"output": i, "shape": list(r.shape), "max_abs_diff": diff,
-                       "corr": corr, "rel_l2": rel})
+        assert len(out) == len(ref), f"output arity mismatch: et={len(out)} torch={len(ref)}"
+        parity = []
+        for i, (o, r) in enumerate(zip(out, ref)):
+            o, r = o.float(), r.float()
+            diff = (o - r).abs().max().item()
+            corr = torch.corrcoef(torch.stack([o.flatten(), r.flatten()]))[0, 1].item()
+            rel = ((o - r).norm() / r.norm().clamp_min(1e-12)).item()
+            parity.append({"output": i, "shape": list(r.shape), "max_abs_diff": diff,
+                           "corr": corr, "rel_l2": rel})
 
-    et_ms = _time_fn(lambda: method.execute(list(example_inputs)), runs=runs)
-    with torch.no_grad():
-        torch_ms = _time_fn(lambda: model(*example_inputs), runs=runs)
+        et_ms = _time_fn(lambda: method.execute(list(example_inputs)), runs=runs)
+        with torch.no_grad():
+            torch_ms = _time_fn(lambda: model(*example_inputs), runs=runs)
 
     result = {
         "name": name,
@@ -366,6 +465,8 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
         **({"int8_mode": "dynamic (linear-only)" if int8_dynamic else "static"}
            if precision == "int8" else {}),
         **({"backend": f"coreml ({COREML_UNIT}, fp16 compute)"} if BACKEND == "coreml" else {}),
+        **({"backend": "vulkan (android gpu)", "host_verified": False}
+           if BACKEND == "vulkan" else {}),
         "delegation": delegation,
         "et_ms_median": round(et_ms, 1),
         "torch_eager_ms_median": round(torch_ms, 1),
@@ -374,12 +475,28 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
     }
     if extra_meta:
         result.update(extra_meta)
-    if BACKEND == "coreml":
+    if BACKEND == "vulkan":
+        rsuffix = "_vulkan"
+    elif BACKEND == "coreml":
         rsuffix = f"_coreml_{COREML_UNIT}"
+        if COREML_PRECISION == "fp32":
+            rsuffix += "_fp32"
     else:
         rsuffix = "" if precision == "fp32" else f"_{precision}"
     with open(os.path.join(RESULTS_DIR, f"{name}{rsuffix}.json"), "w") as f:
         json.dump(result, f, indent=2)
+
+    if BACKEND == "vulkan":
+        print(f"[{name}:vulkan] pte={size_mb:.1f}MB — host cannot run Vulkan; "
+              f"parity is measured on device")
+        total = delegation["delegated_ops"] + delegation["portable_ops"]
+        print(f"  delegation: {delegation['coverage_pct']}% "
+              f"({delegation['delegated_ops']}/{total} ops, {delegation['subgraphs']} subgraph(s))")
+        if delegation["portable_fallback"]:
+            top = ", ".join(f"{k} x{v}" for k, v in
+                            list(delegation["portable_fallback"].items())[:8])
+            print(f"  portable fallback: {top}")
+        return result
 
     worst_corr = min(p["corr"] for p in parity)
     print(f"[{name}:{BACKEND}/{precision}] pte={size_mb:.1f}MB et={et_ms:.1f}ms "
@@ -399,3 +516,34 @@ def convert_and_gate(name, model, example_inputs, runs=10, extra_meta=None, part
         print(f"  out{p['output']} {p['shape']} max_abs_diff={p['max_abs_diff']:.3e} "
               f"corr={p['corr']:.6f} rel_l2={p['rel_l2']:.3e}")
     return result
+
+
+def convert_and_gate(*args, **kwargs):
+    """Convert on every backend this model should ship on.
+
+    XNNPACK is what runs on Android and is the portable baseline; Core ML is the
+    iOS accelerator path and is 3.5-13.9x faster on device. Shipping only the
+    first is what left the shelf running on the CPU for a day, so a plain fp32
+    call now produces both rather than making Core ML something you remember to
+    ask for. Reduced precisions stay XNNPACK-only: Core ML picks its own compute
+    precision from the compile spec.
+
+    Set CONVERT_BACKEND to pin a single backend (the delegate A/B scripts do).
+    """
+    global BACKEND
+    result = _convert_one(*args, **kwargs)
+    precision = kwargs.get("precision", "fp32")
+    explicit_partitioner = kwargs.get("partitioner") is not None
+    if not (ALSO_COREML and precision == "fp32" and not explicit_partitioner):
+        return result
+    was = BACKEND
+    BACKEND = "coreml"
+    try:
+        return _convert_one(*args, **kwargs)
+    except Exception as e:
+        # A model that will not lower to Core ML still ships on XNNPACK; say so
+        # and keep going rather than failing the whole export.
+        print(f"  Core ML build skipped: {type(e).__name__}: {str(e)[:160]}")
+        return result
+    finally:
+        BACKEND = was

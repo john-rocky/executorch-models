@@ -20,7 +20,7 @@ import yaml
 from huggingface_hub import hf_hub_download
 from harness import convert_and_gate
 from calib import calib_loader
-from fft_ops import IRFFT2
+from fft_ops import IRFFT2, RFFT2
 
 SIZE = 512
 for i, a in enumerate(sys.argv):
@@ -81,7 +81,7 @@ from saicinpainting.training.modules.ffc import FourierUnit, FFCResNetGenerator
 
 
 def patch_fourier_unit(size):
-    """Replace the complex round-trip at the end of FourierUnit.forward.
+    """Replace both FFTs in FourierUnit.forward with real-matrix equivalents.
 
     Each unit sees a different spatial size (LaMa downsamples three times), so the
     matrices are built lazily per size and cached on the module. Patching the
@@ -92,8 +92,15 @@ def patch_fourier_unit(size):
     def forward(self, x):
         batch = x.shape[0]
         h, w = x.shape[-2:]
-        ffted = torch.fft.rfftn(x, dim=(-2, -1), norm=self.fft_norm)
-        ffted = torch.stack((ffted.real, ffted.imag), dim=-1)
+        # Forward transform as real matrices too, not just the inverse. XNNPACK
+        # tolerates the complex tensor that rfftn produces because `.real`/`.imag`
+        # split it on the next line, but coremltools rejects a complex dtype and
+        # reports it as an unsupported model output, far from where it came from.
+        fkey = f"_rfft_{h}x{w}"
+        if not hasattr(self, fkey):
+            setattr(self, fkey, RFFT2(h, w, norm=self.fft_norm).to(x.device))
+        re, im = getattr(self, fkey)(x)
+        ffted = torch.stack((re, im), dim=-1)
         ffted = ffted.permute(0, 1, 4, 2, 3).contiguous()
         ffted = ffted.view((batch, -1) + ffted.size()[3:])
         ffted = self.conv_layer(ffted)

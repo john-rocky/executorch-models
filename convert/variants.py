@@ -11,6 +11,11 @@ PRECISIONS = ["fp32", "fp16", "int8"]
 # is iOS-only. They do not compete for one slot, so a Core ML build is never
 # dominated on size — it ships whenever its quality holds.
 BACKENDS = ["coreml_all"]
+# Suffixes that mark a result as a variant of some model rather than a model of
+# its own. Wider than BACKENDS: Vulkan results exist (Android GPU, measured at a
+# median 1.7x and not shipped) and must not be mistaken for separate models.
+VARIANT_SUFFIXES = PRECISIONS[1:] + BACKENDS + ["vulkan", "coreml_ne", "coreml_gpu",
+                                                "coreml_all_fp32"]
 
 # Worst-output corr vs fp32 eager below which a variant is not shippable.
 # Core ML computes in fp16 whatever the graph dtype, so it answers to the fp16 bar.
@@ -114,7 +119,7 @@ def model_names():
         if not f.endswith(".json"):
             continue
         stem = f[: -len(".json")]
-        if any(stem.endswith(f"_{p}") for p in PRECISIONS[1:] + BACKENDS):
+        if any(stem.endswith(f"_{p}") for p in VARIANT_SUFFIXES):
             continue
         # results/ also holds device benchmarks and build reports; a model result
         # is identified by its shape, not by living in the directory.

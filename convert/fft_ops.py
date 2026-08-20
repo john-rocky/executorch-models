@@ -59,8 +59,49 @@ class IRFFT2(nn.Module):
         return torch.matmul(re_h, self.cos_w) + torch.matmul(im_h, self.neg_sin_w)
 
 
+class RFFT2(nn.Module):
+    """`torch.fft.rfftn(x, dim=(-2,-1), norm=...)` for a fixed H x W, as matmuls.
+
+    `rfft2_parts` below is enough for XNNPACK: the complex tensor exists for one
+    line before `.real`/`.imag` split it, and the delegate never sees it. Core ML
+    is stricter — coremltools rejects a complex dtype outright — so the forward
+    transform needs the same real-matrix treatment as the inverse.
+
+    DFT is X[k] = sum_n x[n] (cos - i sin), so along W a real input gives
+    re = x @ cos, im = -(x @ sin); then the H axis is a full complex DFT.
+    """
+
+    def __init__(self, h, w, norm="backward"):
+        super().__init__()
+        assert norm in ("backward", "ortho"), f"unsupported norm {norm!r}"
+        wf = w // 2 + 1
+        n = torch.arange(w, dtype=torch.float64)
+        k = torch.arange(wf, dtype=torch.float64)
+        ang_w = 2 * math.pi * torch.outer(n, k) / w
+        m = torch.arange(h, dtype=torch.float64)
+        ang_h = 2 * math.pi * torch.outer(m, m) / h
+        # "backward" puts the whole 1/N on the inverse, so the forward is unscaled.
+        sh = 1.0 / math.sqrt(h) if norm == "ortho" else 1.0
+        sw = 1.0 / math.sqrt(w) if norm == "ortho" else 1.0
+
+        self.register_buffer("cos_w", (torch.cos(ang_w) * sw).float())
+        self.register_buffer("neg_sin_w", (-torch.sin(ang_w) * sw).float())
+        self.register_buffer("cos_h", (torch.cos(ang_h) * sh).float())
+        self.register_buffer("neg_sin_h", (-torch.sin(ang_h) * sh).float())
+
+    def forward(self, x):
+        re_w = torch.matmul(x, self.cos_w)
+        im_w = torch.matmul(x, self.neg_sin_w)
+        re = torch.matmul(self.cos_h, re_w) - torch.matmul(self.neg_sin_h, im_w)
+        im = torch.matmul(self.neg_sin_h, re_w) + torch.matmul(self.cos_h, im_w)
+        return re, im
+
+
 def rfft2_parts(x, norm="backward"):
-    """Forward half-spectrum as two real tensors. rfftn itself exports cleanly."""
+    """Forward half-spectrum as two real tensors, via torch's own FFT.
+
+    Fine for XNNPACK; use `RFFT2` when the graph must never hold a complex tensor.
+    """
     f = torch.fft.rfftn(x, dim=(-2, -1), norm=norm)
     return f.real, f.imag
 
@@ -72,4 +113,8 @@ if __name__ == "__main__":
             re, im = rfft2_parts(x, norm)
             got = IRFFT2(h, w, norm)(re, im)
             ref = torch.fft.irfftn(torch.complex(re, im), s=(h, w), dim=(-2, -1), norm=norm)
-            print(f"{norm} {h}x{w}: max_abs_diff={(got - ref).abs().max().item():.3e}")
+            fre, fim = RFFT2(h, w, norm)(x)
+            fwd = max((fre - re).abs().max().item(), (fim - im).abs().max().item())
+            rt = IRFFT2(h, w, norm)(fre, fim)
+            print(f"{norm} {h}x{w}: inverse={(got - ref).abs().max().item():.3e} "
+                  f"forward={fwd:.3e} roundtrip={(rt - x).abs().max().item():.3e}")

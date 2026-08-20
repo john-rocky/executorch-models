@@ -37,8 +37,20 @@ class _Guarded:
         return self._m.execute(inputs)
 
 
-def _method(name, prec="fp32"):
-    p = os.path.join(REPO, "pte", f"{name}_xnnpack_{prec}.pte")
+# `--variant coreml_all` runs every card check against the Core ML builds instead
+# of the XNNPACK ones. The recipes on the cards are written once and claimed for
+# every file in the repo, so a build that is 12x faster still has to decode the
+# same way — and Core ML computes in fp16, which is exactly the kind of change
+# that moves an argmax without moving a correlation.
+VARIANT = "fp32"
+
+
+def _method(name, prec=None):
+    prec = prec or VARIANT
+    stem = f"{name}_{prec}" if prec.startswith("coreml") else f"{name}_xnnpack_{prec}"
+    p = os.path.join(REPO, "pte", f"{stem}.pte")
+    if not os.path.exists(p) and prec.startswith("coreml"):
+        raise FileNotFoundError(f"no Core ML build for {name}")
     return _Guarded(Runtime.get().load_program(p).load_method("forward"))
 
 
@@ -316,7 +328,25 @@ def verify_edsr():
     return ok, len(imgs), "tiles upscaled 4x and staying near 0-1"
 
 
+def verify_raft():
+    """Optical flow has a ground truth available for free: shift a frame by a
+    known amount and the flow field has to report that shift back. Border pixels
+    wrap, so only the interior is judged."""
+    m = _method("raft_small")
+    ok = total = 0
+    for dy, dx in ((3, 5), (-4, 2), (6, -6)):
+        for b in calib_loader("general", (384, 512), "pm1", n=2):
+            a = b[0]
+            c = torch.roll(a, shifts=(dy, dx), dims=(-2, -1)).contiguous()
+            f = torch.as_tensor(m.execute([a, c])[0])[0][:, 40:-40, 40:-40]
+            got = (f[0].median().item(), f[1].median().item())
+            total += 1
+            ok += abs(got[0] - dx) < 0.5 and abs(got[1] - dy) < 0.5
+    return ok, total, "known shifts recovered by the flow field to within 0.5 px"
+
+
 CHECKS = {
+    "raft_small": verify_raft,
     "whisper_tiny": verify_whisper,
     "ormbg_isnet": verify_ormbg,
     "dis_isnet": verify_dis,
@@ -336,8 +366,13 @@ CHECKS = {
 }
 
 if __name__ == "__main__":
+    args = sys.argv[1:]
+    if "--variant" in args:
+        i = args.index("--variant")
+        VARIANT = args[i + 1]
+        del args[i:i + 2]
     failed = 0
-    for name in (sys.argv[1:] or list(CHECKS)):
+    for name in (args or list(CHECKS)):
         try:
             ok, total, what = CHECKS[name]()
             verdict = "OK" if ok == total and total > 0 else "FAILED"
